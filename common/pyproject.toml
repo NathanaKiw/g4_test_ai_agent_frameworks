@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "common"
+version = "0.2.0"
+description = "Prompts e utilitários — Agente de Pesquisa e Relatório"
+requires-python = ">=3.10"
+dependencies = [
+    "pymongo>=4.6.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["common*"]

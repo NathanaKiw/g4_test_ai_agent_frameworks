@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "test_vanilla"
+version = "0.1.0"
+description = "Baseline vanilla — API OpenAI direta"
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.40.0",
+    "python-dotenv>=1.0.0",
+    "common",
+]
+
+[project.scripts]
+start_vanilla = "test_vanilla.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["test_vanilla*"]
