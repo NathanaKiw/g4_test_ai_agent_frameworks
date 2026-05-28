@@ -14,7 +14,6 @@ from tenacity import (
     before_sleep_log,
     retry,
     retry_if_exception,
-    retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
@@ -32,12 +31,26 @@ from .config import Config
 
 logger = get_logger("vanilla_research_agent")
 
-# Tipos de erro da OpenAI que justificam retry (transitórios).
-_RETRYABLE_ERRORS = (RateLimitError, APIConnectionError)
-
-
 def _is_retryable_status_error(exc: BaseException) -> bool:
     return isinstance(exc, APIStatusError) and exc.status_code >= 500
+
+
+def _error_code(exc: BaseException) -> str | None:
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error", body)
+        if isinstance(error, dict):
+            code = error.get("code")
+            return str(code) if code else None
+    return None
+
+
+def _is_retryable_openai_error(exc: BaseException) -> bool:
+    if isinstance(exc, APIConnectionError):
+        return True
+    if isinstance(exc, RateLimitError):
+        return _error_code(exc) != "insufficient_quota"
+    return _is_retryable_status_error(exc)
 
 
 class ResearchReportAgent:
@@ -62,8 +75,7 @@ class ResearchReportAgent:
         """
 
         @retry(
-            retry=retry_if_exception_type(_RETRYABLE_ERRORS)
-            | retry_if_exception(_is_retryable_status_error),
+            retry=retry_if_exception(_is_retryable_openai_error),
             wait=wait_exponential(multiplier=1, min=4, max=30),
             stop=stop_after_attempt(3),
             before_sleep=before_sleep_log(self.logger, logging.WARNING),

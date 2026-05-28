@@ -2,7 +2,10 @@ import unittest
 from unittest.mock import patch
 
 from common.mongodb.research_data import ResearchDataService
-from test_vanilla.research_agent import ResearchReportAgent
+from test_vanilla.research_agent import (
+    ResearchReportAgent,
+    _is_retryable_openai_error,
+)
 
 
 class StubResearchService:
@@ -65,6 +68,18 @@ class ResearchDataServiceTest(unittest.TestCase):
         self.assertFalse(service._enabled)
         self.assertIsNone(service.client)
         self.assertIsNone(service.collection)
+
+
+class RetryPolicyTest(unittest.TestCase):
+    def test_insufficient_quota_rate_limit_is_not_retryable(self):
+        class FakeRateLimitError(Exception):
+            pass
+
+        exc = FakeRateLimitError()
+        exc.body = {"error": {"code": "insufficient_quota"}}
+
+        with patch("test_vanilla.research_agent.RateLimitError", FakeRateLimitError):
+            self.assertFalse(_is_retryable_openai_error(exc))
 
 
 if __name__ == "__main__":
