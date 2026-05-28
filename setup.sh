@@ -19,13 +19,13 @@ echo "==> Configurando arquivo de ambiente..."
 if [ ! -f .env ]; then
     cp .env.example .env
     echo "    Arquivo .env criado a partir de .env.example"
-    echo "    ⚠️  Edite .env e preencha sua OPENAI_API_KEY antes de executar."
+    echo "    Edite .env e preencha sua OPENAI_API_KEY antes de executar."
 else
     echo "    Arquivo .env já existe — mantido sem alterações."
 fi
 
 echo ""
-echo "✅ Setup concluído!"
+echo "Setup concluído!"
 echo ""
 echo "Próximos passos:"
 echo "  1. source .venv/bin/activate"

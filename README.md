@@ -167,7 +167,7 @@ python -m unittest discover -s tests
 
 | Variável             | Obrigatória | Descrição                         | Padrão                   |
 |----------------------|-------------|-----------------------------------|--------------------------|
-| `OPENAI_API_KEY`     | ✅ Sim      | Chave de acesso à API OpenAI      | —                        |
+| `OPENAI_API_KEY`     | Sim         | Chave de acesso à API OpenAI      | —                        |
 | `OPENAI_MODEL`       | Não         | Modelo a ser utilizado            | `gpt-4o-mini`            |
 | `OPENAI_TEMPERATURE` | Não         | Temperatura de geração            | `0.0`                    |
 | `MONGODB_URI`        | Não         | URI de conexão MongoDB            | desativado                  |
@@ -198,11 +198,11 @@ Esses valores serão usados como **linha de base** para comparação com os dema
 
 | Framework           | Status        |
 |---------------------|---------------|
-| Vanilla (OpenAI)    | ✅ Concluído  |
-| LangChain           | 🔲 Planejado  |
-| LangGraph           | ✅ Protótipo mínimo |
-| CrewAI              | ✅ Protótipo mínimo |
-| OpenAI Agents SDK   | 🔲 Planejado  |
+| Vanilla (OpenAI)    | Concluído         |
+| LangChain           | Planejado         |
+| LangGraph           | Protótipo mínimo  |
+| CrewAI              | Protótipo mínimo  |
+| OpenAI Agents SDK   | Planejado         |
 
 ## Licença
 
