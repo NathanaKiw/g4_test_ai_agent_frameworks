@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from common.common.logging_config import get_logger
+from ..logging_config import get_logger
 
 logger = get_logger("research_data")
 
@@ -16,13 +16,15 @@ class ResearchDataService:
         self,
         connection_string: str | None = None,
     ):
-        connection_string = connection_string or os.getenv(
-            "MONGODB_URI", "mongodb://localhost:27017/"
-        )
+        connection_string = connection_string or os.getenv("MONGODB_URI")
         self._enabled = False
         self.client = None
         self.collection = None
         self.logger = get_logger("research_data_service")
+
+        if not connection_string:
+            self.logger.info("MongoDB não configurado — persistência desativada")
+            return
 
         try:
             from pymongo import MongoClient

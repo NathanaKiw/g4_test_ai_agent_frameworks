@@ -1,74 +1,193 @@
-# Agente de Pesquisa e Relatório — Baseline Vanilla
+# Agente de Pesquisa e Relatório — Comparativo de Frameworks LLM
 
-Estabelecimento do **caso de uso base** e da implementação **vanilla** (chamadas diretas à API OpenAI), servindo como **linha de base** para comparação futura com LangChain, LangGraph, CrewAI e OpenAI Agents SDK.
+Projeto de **benchmark comparativo de frameworks de agentes LLM**, implementando um pipeline canônico idêntico em múltiplos frameworks e medindo métricas objetivas de desempenho.
 
-## Caso de uso
+## Objetivo
 
-Pipeline sequencial em três etapas:
+Comparar como diferentes frameworks de orquestração de agentes (LangChain, LangGraph, CrewAI, OpenAI Agents SDK) se comportam ao executar o **mesmo pipeline** com os **mesmos prompts**, medindo:
 
-| Etapa | Papel | Objetivo |
-|-------|--------|----------|
-| 1 | Pesquisador | Coletar fatos, contexto e tendências sobre o tópico |
-| 2 | Analista | Interpretar dados, riscos, cenários e lacunas |
-| 3 | Redator | Produzir relatório executivo final |
-
-Os prompts compartilhados ficam em `common/common/research_prompts.py`.
-
-## Baseline Vanilla
-
-Em `vanilla/` não há framework de orquestração: o fluxo é controlado manualmente com **três** chamadas `chat.completions` via SDK OpenAI.
-
-Métricas expostas na saída:
-
-- `api_calls` — sempre 3 (referência do experimento)
+- `api_calls` — número total de tentativas de chamada à API (inclui retries)
 - `stage_timings` — latência por etapa (`research_s`, `analysis_s`, `report_s`)
 
-## Estrutura
+A **fase atual** entrega o **baseline Vanilla** — implementação de referência usando chamadas diretas à API OpenAI, sem nenhum framework de orquestração.
+
+## Pipeline canônico
+
+```
+Tópico → [Pesquisador] → [Analista] → [Redator] → Relatório Executivo
+```
+
+| Etapa | Papel       | Objetivo                                              |
+|-------|-------------|-------------------------------------------------------|
+| 1     | Pesquisador | Coletar fatos, contexto e tendências sobre o tópico   |
+| 2     | Analista    | Interpretar dados, riscos, cenários e lacunas         |
+| 3     | Redator     | Produzir relatório executivo final                    |
+
+Os prompts compartilhados estão em `common/common/research_prompts.py` e são reutilizados por todos os frameworks.
+
+## Estrutura do repositório
 
 ```
 g4_test_ai_agent_frameworks/
-├── common/           # Prompts, config, logging, MongoDB opcional
-├── vanilla/          # Baseline — API OpenAI direta
-├── docs/CASO_DE_USO.md
+├── common/                     # Pacote compartilhado (prompts, config, logging, MongoDB)
+│   └── common/
+│       ├── config.py
+│       ├── logging_config.py
+│       ├── research_prompts.py
+│       └── mongodb/
+│           └── research_data.py
+├── vanilla/                    # Baseline — API OpenAI direta (sem framework)
+│   └── test_vanilla/
+│       ├── config.py
+│       ├── research_agent.py
+│       └── main.py
+├── docs/
+│   └── CASO_DE_USO.md
 ├── requirements.txt
-├── setup.ps1
+├── setup.sh                    # Setup para macOS / Linux
+├── setup.ps1                   # Setup para Windows
 └── .env.example
 ```
 
+## Dependências
+
+- Python >= 3.10
+- [openai](https://pypi.org/project/openai/) >= 1.40.0
+- [python-dotenv](https://pypi.org/project/python-dotenv/) >= 1.0.0
+- [pymongo](https://pypi.org/project/pymongo/) >= 4.6.0 *(opcional — persistência)*
+- [tenacity](https://pypi.org/project/tenacity/) >= 8.2.0 *(retry automático)*
+
 ## Instalação
 
-```powershell
+### macOS / Linux
+
+```bash
+# 1. Clone o repositório e entre na pasta
+git clone <url-do-repo>
 cd g4_test_ai_agent_frameworks
-.\setup.ps1
-.\.venv\Scripts\activate
-# Edite .env e defina OPENAI_API_KEY
+
+# 2. Execute o script de setup
+chmod +x setup.sh
+./setup.sh
+
+# 3. Ative o ambiente virtual
+source .venv/bin/activate
+
+# 4. Configure sua chave de API
+cp .env.example .env
+# Edite .env e preencha OPENAI_API_KEY
 ```
 
-Ou manualmente:
+### Windows (PowerShell)
 
 ```powershell
-python -m venv .venv
+# 1. Clone o repositório e entre na pasta
+git clone <url-do-repo>
+cd g4_test_ai_agent_frameworks
+
+# 2. Execute o script de setup
+.\setup.ps1
+
+# 3. Ative o ambiente virtual
 .\.venv\Scripts\activate
+
+# 4. Configure sua chave de API
+copy .env.example .env
+# Edite .env e preencha OPENAI_API_KEY
+```
+
+### Instalação manual (qualquer SO)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Linux/Mac
+# ou: .\.venv\Scripts\activate   # Windows
+
 pip install -r requirements.txt
 pip install -e ./common -e ./vanilla
-copy .env.example .env
+cp .env.example .env
+```
+
+## Configuração
+
+Edite o arquivo `.env` gerado:
+
+```dotenv
+OPENAI_API_KEY=sk-...           # Obrigatório
+OPENAI_MODEL=gpt-4o-mini        # Padrão: gpt-4o-mini
+OPENAI_TEMPERATURE=0.0          # Padrão: 0.0
+# MONGODB_URI=mongodb://localhost:27017/ # Opcional; descomente para persistir no MongoDB
 ```
 
 ## Execução
 
-```powershell
+```bash
 start_vanilla --topic "Impacto da IA na educação brasileira"
+```
+
+## Testes
+
+```bash
+python -m unittest discover -s tests
+```
+
+### Saída esperada
+
+```
+=== RELATÓRIO FINAL (Vanilla) ===
+
+# Relatório Executivo: Impacto da IA na Educação Brasileira
+
+## Resumo Executivo
+...
+
+## Introdução
+...
+
+[Chamadas API: 3]
+[Latência por etapa (s): pesquisa=8.32, análise=6.51, relatório=9.14]
 ```
 
 ## Variáveis de ambiente
 
-| Variável | Descrição |
-|----------|-----------|
-| `OPENAI_API_KEY` | Obrigatória |
-| `OPENAI_MODEL` | Padrão: `gpt-4o-mini` |
-| `OPENAI_TEMPERATURE` | Padrão: `0.0` |
-| `RESEARCH_TOPIC` | Tópico padrão (opcional) |
-| `MONGODB_URI` | Persistência opcional |
+| Variável             | Obrigatória | Descrição                         | Padrão                   |
+|----------------------|-------------|-----------------------------------|--------------------------|
+| `OPENAI_API_KEY`     | ✅ Sim      | Chave de acesso à API OpenAI      | —                        |
+| `OPENAI_MODEL`       | Não         | Modelo a ser utilizado            | `gpt-4o-mini`            |
+| `OPENAI_TEMPERATURE` | Não         | Temperatura de geração            | `0.0`                    |
+| `MONGODB_URI`        | Não         | URI de conexão MongoDB            | desativado                  |
+
+## Métricas de benchmark
+
+Cada execução retorna:
+
+```json
+{
+  "framework": "Vanilla (OpenAI API)",
+  "api_calls": 3,
+  "stage_timings": {
+    "research_s": 8.32,
+    "analysis_s": 6.51,
+    "report_s": 9.14
+  },
+  "topic": "...",
+  "report": "..."
+}
+```
+
+Sem retries, o baseline executa três chamadas lógicas. Se houver rate limit, falha de conexão ou erro 5xx transitório, `api_calls` pode ser maior porque contabiliza as tentativas reais enviadas à API.
+
+Esses valores serão usados como **linha de base** para comparação com os demais frameworks.
+
+## Próximas fases
+
+| Framework           | Status        |
+|---------------------|---------------|
+| Vanilla (OpenAI)    | ✅ Concluído  |
+| LangChain           | 🔲 Planejado  |
+| LangGraph           | 🔲 Planejado  |
+| CrewAI              | 🔲 Planejado  |
+| OpenAI Agents SDK   | 🔲 Planejado  |
 
 ## Licença
 
