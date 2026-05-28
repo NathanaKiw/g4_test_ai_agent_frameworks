@@ -2,7 +2,7 @@
 
 ## Objetivo (fase atual)
 
-Implementar o pipeline canônico e o **baseline vanilla** — referência mínima de latência, controle de fluxo e número de chamadas API antes de comparar frameworks.
+Implementar o pipeline canônico, o **baseline vanilla** e os protótipos mínimos de Sprint 2 em **LangGraph** e **CrewAI**.
 
 ## Fluxo canônico
 
@@ -23,6 +23,21 @@ flowchart LR
 
 Implementação: `vanilla/test_vanilla/research_agent.py`
 
+## Protótipos Sprint 2
+
+| Framework | Implementação | Foco |
+|-----------|---------------|------|
+| LangGraph | `langgraph_pipeline/test_langgraph/research_agent.py` | Controle explícito do fluxo com `StateGraph` |
+| CrewAI | `crewai_pipeline/test_crewai/research_agent.py` | Colaboração sequencial entre agentes especializados |
+
+Comandos:
+
+```bash
+start_vanilla --topic "Impacto da IA na educação brasileira"
+start_langgraph --topic "Impacto da IA na educação brasileira"
+start_crewai --topic "Impacto da IA na educação brasileira"
+```
+
 ## Variáveis controladas
 
 | Variável    | Fonte                                                                   |
@@ -32,6 +47,6 @@ Implementação: `vanilla/test_vanilla/research_agent.py`
 | Temperatura | `OPENAI_TEMPERATURE`                                                    |
 | Tópico      | `--topic` na CLI                                                        |
 
-## Próximas fases (fora do escopo atual)
+## Próximas fases
 
-Comparação com LangChain, LangGraph, CrewAI e OpenAI Agents SDK usando o mesmo caso de uso e os mesmos prompts compartilhados em `common/`.
+Evoluir a comparação com OpenAI Agents SDK, guardrails, engenharia de contexto e consolidação das métricas de latência, tokens e custo.

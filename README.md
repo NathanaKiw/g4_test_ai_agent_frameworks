@@ -9,7 +9,7 @@ Comparar como diferentes frameworks de orquestração de agentes (LangChain, Lan
 - `api_calls` — número total de tentativas de chamada à API (inclui retries)
 - `stage_timings` — latência por etapa (`research_s`, `analysis_s`, `report_s`)
 
-A **fase atual** entrega o **baseline Vanilla** — implementação de referência usando chamadas diretas à API OpenAI, sem nenhum framework de orquestração.
+A fase atual entrega o **baseline Vanilla** e dois protótipos mínimos da Sprint 2: **LangGraph** e **CrewAI**.
 
 ## Pipeline canônico
 
@@ -41,6 +41,16 @@ g4_test_ai_agent_frameworks/
 │       ├── config.py
 │       ├── research_agent.py
 │       └── main.py
+├── langgraph_pipeline/         # Protótipo Sprint 2 — LangGraph StateGraph
+│   └── test_langgraph/
+│       ├── config.py
+│       ├── research_agent.py
+│       └── main.py
+├── crewai_pipeline/            # Protótipo Sprint 2 — CrewAI sequencial
+│   └── test_crewai/
+│       ├── config.py
+│       ├── research_agent.py
+│       └── main.py
 ├── docs/
 │   └── CASO_DE_USO.md
 ├── requirements.txt
@@ -56,6 +66,9 @@ g4_test_ai_agent_frameworks/
 - [python-dotenv](https://pypi.org/project/python-dotenv/) >= 1.0.0
 - [pymongo](https://pypi.org/project/pymongo/) >= 4.6.0 *(opcional — persistência)*
 - [tenacity](https://pypi.org/project/tenacity/) >= 8.2.0 *(retry automático)*
+- [langgraph](https://pypi.org/project/langgraph/) >= 1.0.0
+- [langchain-openai](https://pypi.org/project/langchain-openai/) >= 0.3.0
+- [crewai](https://pypi.org/project/crewai/) >= 1.0.0
 
 ## Instalação
 
@@ -104,7 +117,7 @@ source .venv/bin/activate        # Linux/Mac
 # ou: .\.venv\Scripts\activate   # Windows
 
 pip install -r requirements.txt
-pip install -e ./common -e ./vanilla
+pip install -e ./common -e ./vanilla -e ./langgraph_pipeline -e ./crewai_pipeline
 cp .env.example .env
 ```
 
@@ -123,6 +136,8 @@ OPENAI_TEMPERATURE=0.0          # Padrão: 0.0
 
 ```bash
 start_vanilla --topic "Impacto da IA na educação brasileira"
+start_langgraph --topic "Impacto da IA na educação brasileira"
+start_crewai --topic "Impacto da IA na educação brasileira"
 ```
 
 ## Testes
@@ -134,7 +149,7 @@ python -m unittest discover -s tests
 ### Saída esperada
 
 ```
-=== RELATÓRIO FINAL (Vanilla) ===
+=== RELATÓRIO FINAL (<framework>) ===
 
 # Relatório Executivo: Impacto da IA na Educação Brasileira
 
@@ -163,7 +178,7 @@ Cada execução retorna:
 
 ```json
 {
-  "framework": "Vanilla (OpenAI API)",
+  "framework": "Vanilla (OpenAI API) | LangGraph | CrewAI",
   "api_calls": 3,
   "stage_timings": {
     "research_s": 8.32,
@@ -185,8 +200,8 @@ Esses valores serão usados como **linha de base** para comparação com os dema
 |---------------------|---------------|
 | Vanilla (OpenAI)    | ✅ Concluído  |
 | LangChain           | 🔲 Planejado  |
-| LangGraph           | 🔲 Planejado  |
-| CrewAI              | 🔲 Planejado  |
+| LangGraph           | ✅ Protótipo mínimo |
+| CrewAI              | ✅ Protótipo mínimo |
 | OpenAI Agents SDK   | 🔲 Planejado  |
 
 ## Licença

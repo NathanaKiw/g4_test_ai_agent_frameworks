@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "test_langgraph"
+version = "0.1.0"
+description = "Protótipo LangGraph — Agente de Pesquisa e Relatório"
+requires-python = ">=3.10"
+dependencies = [
+    "common",
+    "langchain-openai>=0.3.0",
+    "langgraph>=1.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+start_langgraph = "test_langgraph.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["test_langgraph*"]

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "test_crewai"
+version = "0.1.0"
+description = "Protótipo CrewAI — Agente de Pesquisa e Relatório"
+requires-python = ">=3.10"
+dependencies = [
+    "common",
+    "crewai[openai]>=1.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+start_crewai = "test_crewai.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["test_crewai*"]

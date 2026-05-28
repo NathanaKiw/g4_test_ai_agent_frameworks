@@ -1,4 +1,4 @@
-# Instala dependências do baseline vanilla (caso de uso + common).
+# Instala dependências dos protótipos (caso de uso + common).
 $ErrorActionPreference = "Stop"
 $Root = $PSScriptRoot
 
@@ -8,7 +8,7 @@ if (-not (Test-Path "$Root\.venv\Scripts\python.exe")) {
 
 $pip = "$Root\.venv\Scripts\pip.exe"
 & $pip install -r "$Root\requirements.txt"
-& $pip install -e "$Root\common" -e "$Root\vanilla"
+& $pip install -e "$Root\common" -e "$Root\vanilla" -e "$Root\langgraph_pipeline" -e "$Root\crewai_pipeline"
 
 if (-not (Test-Path "$Root\.env")) {
     Copy-Item "$Root\.env.example" "$Root\.env"
