@@ -61,12 +61,13 @@ No Windows:
 copy .env.example .env
 ```
 
-Edite o `.env` e preencha sua chave da OpenAI:
+Edite o `.env` e preencha sua chave da Groq:
 
 ```dotenv
-OPENAI_API_KEY=sk-sua-chave-aqui
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_TEMPERATURE=0.0
+GROQ_API_KEY=gsk-sua-chave-aqui
+GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_TEMPERATURE=0.0
+GROQ_BASE_URL=https://api.groq.com/openai/v1
 ```
 
 MongoDB é opcional. Para persistir relatórios, descomente e ajuste:
@@ -112,15 +113,15 @@ OK
 
 ## 7. Erros comuns
 
-### OPENAI_API_KEY ausente
+### GROQ_API_KEY ausente
 
 Se aparecer:
 
 ```text
-OPENAI_API_KEY é obrigatório
+GROQ_API_KEY é obrigatório
 ```
 
-verifique se o arquivo `.env` existe e se contém uma chave válida.
+verifique se o arquivo `.env` existe e se contém uma chave Groq válida.
 
 ### Quota insuficiente
 
@@ -131,15 +132,15 @@ Error code: 429
 code: insufficient_quota
 ```
 
-a chave chegou à API, mas a conta/projeto OpenAI está sem créditos ou billing
-ativo. Verifique o billing da conta na plataforma da OpenAI antes de rodar
+a chave chegou à API, mas a conta/projeto Groq está sem créditos ou billing
+ativo. Verifique o billing da conta na plataforma da Groq antes de rodar
 novamente.
 
 ## 8. O que cada comando executa
 
 | Comando | Implementação | Descrição |
 |---------|---------------|-----------|
-| `start_vanilla` | `vanilla/test_vanilla/research_agent.py` | Baseline com chamadas diretas à API OpenAI |
+| `start_vanilla` | `vanilla/test_vanilla/research_agent.py` | Baseline com chamadas diretas à API Groq |
 | `start_langgraph` | `langgraph_pipeline/test_langgraph/research_agent.py` | Fluxo com `StateGraph` e nós explícitos |
 | `start_crewai` | `crewai_pipeline/test_crewai/research_agent.py` | Três agentes especializados em processo sequencial |
 

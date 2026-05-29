@@ -43,8 +43,8 @@ start_crewai --topic "Impacto da IA na educação brasileira"
 | Variável    | Fonte                                                                   |
 |-------------|-------------------------------------------------------------------------|
 | Prompts     | `common/common/research_prompts.py` (`*_system` + `*_user` por etapa)  |
-| Modelo      | `OPENAI_MODEL`                                                          |
-| Temperatura | `OPENAI_TEMPERATURE`                                                    |
+| Modelo      | `GROQ_MODEL`                                                            |
+| Temperatura | `GROQ_TEMPERATURE`                                                      |
 | Tópico      | `--topic` na CLI                                                        |
 
 ## Próximas fases

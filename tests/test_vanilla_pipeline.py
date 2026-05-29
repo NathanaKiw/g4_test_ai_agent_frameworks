@@ -39,7 +39,7 @@ class VanillaPipelineTest(unittest.TestCase):
     def test_pipeline_returns_standard_benchmark_result(self):
         result = StubResearchReportAgent().run_research_pipeline("tema teste")
 
-        self.assertEqual(result["framework"], "Vanilla (OpenAI API)")
+        self.assertEqual(result["framework"], "Vanilla (Groq API)")
         self.assertEqual(result["api_calls"], 3)
         self.assertEqual(
             set(result["stage_timings"]),

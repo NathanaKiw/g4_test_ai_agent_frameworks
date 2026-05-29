@@ -56,14 +56,17 @@ def _is_retryable_openai_error(exc: BaseException) -> bool:
 class ResearchReportAgent:
     """Pipeline pesquisa → análise → relatório via API REST/SDK OpenAI."""
 
-    FRAMEWORK = "Vanilla (OpenAI API)"
+    FRAMEWORK = "Vanilla (Groq API)"
     API_CALLS_PER_RUN = 3
 
     def __init__(self) -> None:
         self.config = Config()
         self.logger = get_logger("vanilla_research_agent")
         self.research_service = ResearchDataService()
-        self.client = OpenAI(api_key=self.config.openai_api_key)
+        self.client = OpenAI(
+            api_key=self.config.groq_api_key,
+            base_url=self.config.groq_base_url,
+        )
         self._last_api_calls = 0
 
     def _chat(self, system_content: str, user_content: str) -> str:
@@ -84,8 +87,8 @@ class ResearchReportAgent:
         def _call() -> str:
             self._last_api_calls += 1
             response = self.client.chat.completions.create(
-                model=self.config.openai_model,
-                temperature=self.config.openai_temperature,
+                model=self.config.groq_model,
+                temperature=self.config.groq_temperature,
                 messages=[
                     {"role": "system", "content": system_content},
                     {"role": "user", "content": user_content},

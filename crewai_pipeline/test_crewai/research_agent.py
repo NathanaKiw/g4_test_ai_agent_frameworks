@@ -6,7 +6,9 @@ executadas em processo sequencial.
 
 import time
 from datetime import datetime
+from contextlib import contextmanager
 from typing import Any, Dict
+import logging
 
 from common import (
     ResearchDataService,
@@ -21,6 +23,40 @@ from common import (
 from common.logging_config import get_logger
 
 from .config import Config
+
+
+def _error_code(exc: BaseException) -> str | None:
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error", body)
+        if isinstance(error, dict):
+            code = error.get("code")
+            return str(code) if code else None
+    return None
+
+
+def _is_insufficient_quota_error(exc: BaseException) -> bool:
+    return _error_code(exc) == "insufficient_quota"
+
+
+@contextmanager
+def _suppress_crewai_logging():
+    logger_names = (
+        "crewai",
+        "crewai.flow",
+        "crewai.flow.flow",
+        "CrewAIEventsBus",
+    )
+    previous_levels = {}
+    try:
+        for name in logger_names:
+            logger = logging.getLogger(name)
+            previous_levels[name] = logger.level
+            logger.setLevel(logging.CRITICAL)
+        yield
+    finally:
+        for name, previous_level in previous_levels.items():
+            logging.getLogger(name).setLevel(previous_level)
 
 
 class CrewAIResearchReportAgent:
@@ -47,8 +83,10 @@ class CrewAIResearchReportAgent:
         self.logger = get_logger("crewai_research_agent")
         self.research_service = ResearchDataService()
         self.llm = LLM(
-            model=f"openai/{self.config.openai_model}",
-            temperature=self.config.openai_temperature,
+            model=self.config.groq_model,
+            temperature=self.config.groq_temperature,
+            api_key=self.config.groq_api_key,
+            base_url=self.config.groq_base_url,
         )
         self._last_api_calls = 0
 
@@ -164,7 +202,17 @@ class CrewAIResearchReportAgent:
         )
 
         t0 = time.perf_counter()
-        crew.kickoff(inputs={"topic": topic})
+        with _suppress_crewai_logging():
+            try:
+                crew.kickoff(inputs={"topic": topic})
+            except Exception as exc:
+                if _is_insufficient_quota_error(exc):
+                    raise ValueError(
+                        "Quota da API Groq esgotada para o CrewAI. "
+                        "Atualize o GROQ_API_KEY, verifique billing/faturamento "
+                        "ou use um modelo com quota disponível em GROQ_MODEL."
+                    ) from exc
+                raise
         self._last_api_calls = max(self._last_api_calls, len(tasks))
 
         stage_keys = ("research_s", "analysis_s", "report_s")

@@ -36,7 +36,7 @@ g4_test_ai_agent_frameworks/
 │       ├── research_prompts.py
 │       └── mongodb/
 │           └── research_data.py
-├── vanilla/                    # Baseline — API OpenAI direta (sem framework)
+├── vanilla/                    # Baseline — API Groq direta (sem framework)
 │   └── test_vanilla/
 │       ├── config.py
 │       ├── research_agent.py
@@ -88,7 +88,7 @@ source .venv/bin/activate
 
 # 4. Configure sua chave de API
 cp .env.example .env
-# Edite .env e preencha OPENAI_API_KEY
+# Edite .env e preencha GROQ_API_KEY
 ```
 
 ### Windows (PowerShell)
@@ -106,7 +106,7 @@ cd g4_test_ai_agent_frameworks
 
 # 4. Configure sua chave de API
 copy .env.example .env
-# Edite .env e preencha OPENAI_API_KEY
+# Edite .env e preencha GROQ_API_KEY
 ```
 
 ### Instalação manual (qualquer SO)
@@ -126,9 +126,10 @@ cp .env.example .env
 Edite o arquivo `.env` gerado:
 
 ```dotenv
-OPENAI_API_KEY=sk-...           # Obrigatório
-OPENAI_MODEL=gpt-4o-mini        # Padrão: gpt-4o-mini
-OPENAI_TEMPERATURE=0.0          # Padrão: 0.0
+GROQ_API_KEY=gsk-...            # Obrigatório
+GROQ_MODEL=llama-3.3-70b-versatile  # Padrão: llama-3.3-70b-versatile
+GROQ_TEMPERATURE=0.0            # Padrão: 0.0
+GROQ_BASE_URL=https://api.groq.com/openai/v1
 # MONGODB_URI=mongodb://localhost:27017/ # Opcional; descomente para persistir no MongoDB
 ```
 
@@ -167,9 +168,10 @@ python -m unittest discover -s tests
 
 | Variável             | Obrigatória | Descrição                         | Padrão                   |
 |----------------------|-------------|-----------------------------------|--------------------------|
-| `OPENAI_API_KEY`     | Sim         | Chave de acesso à API OpenAI      | —                        |
-| `OPENAI_MODEL`       | Não         | Modelo a ser utilizado            | `gpt-4o-mini`            |
-| `OPENAI_TEMPERATURE` | Não         | Temperatura de geração            | `0.0`                    |
+| `GROQ_API_KEY`       | Sim         | Chave de acesso à API Groq        | —                        |
+| `GROQ_MODEL`         | Não         | Modelo a ser utilizado            | `llama-3.3-70b-versatile`|
+| `GROQ_TEMPERATURE`   | Não         | Temperatura de geração            | `0.0`                    |
+| `GROQ_BASE_URL`      | Não         | Endpoint OpenAI-compatible da Groq | `https://api.groq.com/openai/v1` |
 | `MONGODB_URI`        | Não         | URI de conexão MongoDB            | desativado                  |
 
 ## Métricas de benchmark
@@ -178,7 +180,7 @@ Cada execução retorna:
 
 ```json
 {
-  "framework": "Vanilla (OpenAI API) | LangGraph | CrewAI",
+  "framework": "Vanilla (Groq API) | LangGraph | CrewAI",
   "api_calls": 3,
   "stage_timings": {
     "research_s": 8.32,
@@ -198,7 +200,7 @@ Esses valores serão usados como **linha de base** para comparação com os dema
 
 | Framework           | Status        |
 |---------------------|---------------|
-| Vanilla (OpenAI)    | Concluído         |
+| Vanilla (Groq)      | Concluído         |
 | LangChain           | Planejado         |
 | LangGraph           | Protótipo mínimo  |
 | CrewAI              | Protótipo mínimo  |

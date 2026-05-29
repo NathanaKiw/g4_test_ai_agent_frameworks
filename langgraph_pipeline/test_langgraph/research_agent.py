@@ -41,9 +41,10 @@ class LangGraphResearchReportAgent:
         self.logger = get_logger("langgraph_research_agent")
         self.research_service = ResearchDataService()
         self.llm = ChatOpenAI(
-            model=self.config.openai_model,
-            temperature=self.config.openai_temperature,
-            api_key=self.config.openai_api_key,
+            model=self.config.groq_model,
+            temperature=self.config.groq_temperature,
+            api_key=self.config.groq_api_key,
+            base_url=self.config.groq_base_url,
         )
         self._last_api_calls = 0
         self.graph = self._build_graph()

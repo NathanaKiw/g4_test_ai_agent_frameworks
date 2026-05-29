@@ -5,7 +5,7 @@ import sys
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 from .research_agent import CrewAIResearchReportAgent  # noqa: E402
 

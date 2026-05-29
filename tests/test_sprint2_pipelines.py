@@ -1,6 +1,9 @@
 import unittest
 
-from test_crewai.research_agent import CrewAIResearchReportAgent
+from test_crewai.research_agent import (
+    CrewAIResearchReportAgent,
+    _is_insufficient_quota_error,
+)
 from test_langgraph.research_agent import LangGraphResearchReportAgent
 
 
@@ -73,6 +76,43 @@ class CrewAIMetricsTest(unittest.TestCase):
             set(stage_timings),
             {"research_s", "analysis_s", "report_s"},
         )
+
+    def test_insufficient_quota_error_is_detected(self):
+        class FakeRateLimitError(Exception):
+            pass
+
+        exc = FakeRateLimitError()
+        exc.body = {"error": {"code": "insufficient_quota"}}
+
+        self.assertTrue(_is_insufficient_quota_error(exc))
+
+    def test_run_research_pipeline_wraps_insufficient_quota(self):
+        class FakeRateLimitError(Exception):
+            pass
+
+        class FakeCrew:
+            def __init__(self, *args, **kwargs):
+                return None
+
+            def kickoff(self, inputs):
+                exc = FakeRateLimitError()
+                exc.body = {"error": {"code": "insufficient_quota"}}
+                raise exc
+
+        class StubCrewAIAgent(CrewAIResearchReportAgent):
+            def __init__(self):
+                self._last_api_calls = 0
+                self.research_service = StubResearchService()
+                self.logger = StubLogger()
+                self.Crew = FakeCrew
+                self.Process = type("Process", (), {"sequential": object()})
+
+            def _build_tasks(self, topic, stage_timings):
+                task = type("Task", (), {"output": type("Output", (), {"raw": "stub"})()})()
+                return [task, task, task], [object(), object(), object()]
+
+        with self.assertRaisesRegex(ValueError, "Quota da API Groq esgotada"):
+            StubCrewAIAgent().run_research_pipeline("tema teste")
 
 
 if __name__ == "__main__":
