@@ -1,4 +1,4 @@
-"""Configuração do baseline vanilla."""
+"""Configuração do protótipo LangGraph."""
 
 from common.config import BaseConfig
 

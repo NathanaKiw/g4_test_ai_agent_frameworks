@@ -1,4 +1,4 @@
-"""CLI do baseline vanilla."""
+"""CLI do protótipo LangGraph."""
 
 import argparse
 import sys
@@ -7,25 +7,24 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-from .research_agent import ResearchReportAgent  # noqa: E402 (após load_dotenv)
+from .research_agent import LangGraphResearchReportAgent  # noqa: E402
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Agente de Pesquisa — baseline Vanilla")
+    parser = argparse.ArgumentParser(description="Agente de Pesquisa — LangGraph")
     parser.add_argument("--topic", required=True, help="Tópico de pesquisa")
     args = parser.parse_args()
 
     agent = None
     try:
-        agent = ResearchReportAgent()
+        agent = LangGraphResearchReportAgent()
         result = agent.run_research_pipeline(args.topic)
 
-        print("\n=== RELATÓRIO FINAL (Vanilla) ===\n")
+        print("\n=== RELATÓRIO FINAL (LangGraph) ===\n")
         print(result["report"])
 
-        api_calls = result.get("api_calls", 3)
         timings = result.get("stage_timings", {})
-        print(f"\n[Chamadas API: {api_calls}]")
+        print(f"\n[Chamadas API: {result.get('api_calls', 3)}]")
         if timings:
             print(
                 f"[Latência por etapa (s): "
