@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import random
 import statistics
 import time
@@ -29,12 +30,38 @@ from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACTS_DIR = ROOT / "artifacts" / "benchmark"
+STAGE_METRICS = [
+    ("research_s", "Pesquisa", "#6d28d9"),
+    ("analysis_s", "Análise", "#2563eb"),
+    ("report_s", "Relatório", "#0ea5e9"),
+]
+SIMULATED_PROFILES = {
+    "Vanilla": {
+        "description": "Chamadas diretas com menor overhead de orquestração",
+        "framework_multiplier": 0.90,
+        "stage_multipliers": [1.35, 0.80, 1.05],
+        "overhead_s": 0.002,
+    },
+    "LangGraph": {
+        "description": "Grafo explícito com overhead intermediário de coordenação",
+        "framework_multiplier": 1.20,
+        "stage_multipliers": [1.55, 1.05, 1.30],
+        "overhead_s": 0.004,
+    },
+    "CrewAI": {
+        "description": "Orquestração multiagente sequencial com maior overhead simulado",
+        "framework_multiplier": 1.45,
+        "stage_multipliers": [1.75, 1.25, 1.50],
+        "overhead_s": 0.006,
+    },
+}
 
 
 def _ensure_import_paths() -> None:
     import sys
 
     paths = [
+        str(ROOT),
         str(ROOT / "common"),
         str(ROOT / "vanilla"),
         str(ROOT / "langgraph_pipeline"),
@@ -82,12 +109,24 @@ class BenchmarkLogger:
 class BaseBenchmarkAgent:
     framework_name = "Base"
 
-    def __init__(self, delay_s: float, jitter_s: float = 0.0) -> None:
+    def __init__(self, delay_s: float, jitter_s: float = 0.0, uniform_delays: bool = False) -> None:
         self.delay_s = delay_s
         self.jitter_s = jitter_s
+        self.uniform_delays = uniform_delays
 
-    def _sleep(self) -> None:
-        delay = self.delay_s
+    def _delay_for_stage(self, stage_index: int) -> float:
+        if self.uniform_delays:
+            return self.delay_s
+
+        profile = SIMULATED_PROFILES.get(self.framework_name, {})
+        framework_multiplier = float(profile.get("framework_multiplier", 1.0))
+        stage_multipliers = profile.get("stage_multipliers", [1.0, 1.0, 1.0])
+        overhead_s = float(profile.get("overhead_s", 0.0))
+        stage_multiplier = float(stage_multipliers[min(stage_index, len(stage_multipliers) - 1)])
+        return (self.delay_s * framework_multiplier * stage_multiplier) + overhead_s
+
+    def _sleep_for_stage(self, stage_index: int) -> None:
+        delay = self._delay_for_stage(stage_index)
         if self.jitter_s:
             delay += random.uniform(-self.jitter_s, self.jitter_s)
             delay = max(0.0, delay)
@@ -96,21 +135,25 @@ class BaseBenchmarkAgent:
 
 
 class VanillaBenchmarkAgent(BaseBenchmarkAgent, VanillaAgent):
-    def __init__(self, delay_s: float, jitter_s: float = 0.0) -> None:
-        BaseBenchmarkAgent.__init__(self, delay_s, jitter_s)
+    framework_name = "Vanilla"
+
+    def __init__(self, delay_s: float, jitter_s: float = 0.0, uniform_delays: bool = False) -> None:
+        BaseBenchmarkAgent.__init__(self, delay_s, jitter_s, uniform_delays)
         self._last_api_calls = 0
         self.research_service = BenchmarkResearchService()
         self.logger = BenchmarkLogger()
 
     def _chat(self, system_content: str, user_content: str) -> str:
         self._last_api_calls += 1
-        self._sleep()
+        self._sleep_for_stage(self._last_api_calls - 1)
         return f"{self.framework_name} response {self._last_api_calls}"
 
 
 class LangGraphBenchmarkAgent(BaseBenchmarkAgent, LangGraphResearchReportAgent):
-    def __init__(self, delay_s: float, jitter_s: float = 0.0) -> None:
-        BaseBenchmarkAgent.__init__(self, delay_s, jitter_s)
+    framework_name = "LangGraph"
+
+    def __init__(self, delay_s: float, jitter_s: float = 0.0, uniform_delays: bool = False) -> None:
+        BaseBenchmarkAgent.__init__(self, delay_s, jitter_s, uniform_delays)
         self._last_api_calls = 0
         self.research_service = BenchmarkResearchService()
         self.logger = BenchmarkLogger()
@@ -118,18 +161,20 @@ class LangGraphBenchmarkAgent(BaseBenchmarkAgent, LangGraphResearchReportAgent):
 
     def _chat(self, system_content: str, user_content: str) -> str:
         self._last_api_calls += 1
-        self._sleep()
+        self._sleep_for_stage(self._last_api_calls - 1)
         return f"{self.framework_name} response {self._last_api_calls}"
 
 
 class CrewAIBenchmarkAgent(BaseBenchmarkAgent, CrewAIResearchReportAgent):
-    def __init__(self, delay_s: float, jitter_s: float = 0.0) -> None:
-        BaseBenchmarkAgent.__init__(self, delay_s, jitter_s)
+    framework_name = "CrewAI"
+
+    def __init__(self, delay_s: float, jitter_s: float = 0.0, uniform_delays: bool = False) -> None:
+        BaseBenchmarkAgent.__init__(self, delay_s, jitter_s, uniform_delays)
         self._last_api_calls = 0
         self.research_service = BenchmarkResearchService()
         self.logger = BenchmarkLogger()
         self.Crew = lambda **kwargs: FakeCrew(  # noqa: E731
-            delay_s=self.delay_s,
+            stage_delays=[self._delay_for_stage(index) for index in range(len(STAGE_METRICS))],
             jitter_s=self.jitter_s,
             **kwargs,
         )
@@ -162,16 +207,16 @@ class CrewAIBenchmarkAgent(BaseBenchmarkAgent, CrewAIResearchReportAgent):
 
 
 class FakeCrew:
-    def __init__(self, agents, tasks, process, verbose=False, delay_s=0.0, jitter_s=0.0):
+    def __init__(self, agents, tasks, process, verbose=False, stage_delays=None, jitter_s=0.0):
         self.agents = agents
         self.tasks = tasks
         self.process = process
         self.verbose = verbose
-        self.delay_s = delay_s
+        self.stage_delays = stage_delays or [0.0, 0.0, 0.0]
         self.jitter_s = jitter_s
 
-    def _sleep(self) -> None:
-        delay = self.delay_s
+    def _sleep_for_stage(self, stage_index: int) -> None:
+        delay = self.stage_delays[min(stage_index, len(self.stage_delays) - 1)]
         if self.jitter_s:
             delay += random.uniform(-self.jitter_s, self.jitter_s)
             delay = max(0.0, delay)
@@ -180,8 +225,8 @@ class FakeCrew:
 
     def kickoff(self, inputs: Dict[str, Any]):
         # Simula execução sequencial dos três tasks e aciona callbacks.
-        for task in self.tasks:
-            self._sleep()
+        for index, task in enumerate(self.tasks):
+            self._sleep_for_stage(index)
             callback = getattr(task, "callback", None)
             if callback:
                 callback(task)
@@ -262,6 +307,7 @@ def _write_markdown(path: Path, summary: List[Dict[str, Any]], args: argparse.Na
         f"Execuções por framework: {args.runs}",
         f"Delay simulado por chamada: {args.delay:.3f}s",
         f"Jitter opcional: {args.jitter:.3f}s",
+        f"Modo de delay: {'uniforme' if args.uniform_delays else 'perfis simulados por framework'}",
         "",
         "## Resumo",
         "",
@@ -277,7 +323,7 @@ def _write_markdown(path: Path, summary: List[Dict[str, Any]], args: argparse.Na
         "## Interpretação",
         "",
         "- `api_calls` fica em 3 porque cada pipeline faz três etapas.",
-        "- O tempo total reflete o delay simulado mais o overhead de cada framework.",
+        "- O tempo total reflete o delay simulado, os pesos por etapa e o overhead de cada framework.",
         "- Os gráficos mostram as médias consolidadas por framework.",
     ])
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -293,6 +339,7 @@ def _write_table_markdown(
         "",
         f"Data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
         f"Execuções por framework: {args.runs}",
+        f"Modo de delay: {'uniforme' if args.uniform_delays else 'perfis simulados por framework'}",
         "",
         "| Framework | Execuções | Tempo médio total (s) | Desvio padrão (s) | API calls média | Pesquisa | Análise | Relatório |",
         "|---|---:|---:|---:|---:|---:|---:|---:|",
@@ -311,44 +358,69 @@ def _write_table_markdown(
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def _write_html_report(
-        path: Path,
-        summary: List[Dict[str, Any]],
-        args: argparse.Namespace,
-        results: List[RunResult],
+def _write_manifest(
+    path: Path,
+    summary: List[Dict[str, Any]],
+    args: argparse.Namespace,
+    generated_files: List[Path],
 ) -> None:
-        total_runs = len(results)
-        avg_total = _mean(item.total_s for item in results)
-        fastest = summary[0] if summary else None
-        slowest = summary[-1] if summary else None
-        frameworks = len(summary)
-        html_rows = []
-        for row in summary:
-                html_rows.append(
-                        "<tr>"
-                        f"<td>{row['framework']}</td>"
-                        f"<td>{row['runs']}</td>"
-                        f"<td>{row['avg_total_s']:.4f}</td>"
-                        f"<td>{row['stdev_total_s']:.4f}</td>"
-                        f"<td>{row['avg_api_calls']:.1f}</td>"
-                        f"<td>{row['avg_research_s']:.4f}</td>"
-                        f"<td>{row['avg_analysis_s']:.4f}</td>"
-                        f"<td>{row['avg_report_s']:.4f}</td>"
-                        "</tr>"
-                )
+    payload = {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "parameters": {
+            "runs": args.runs,
+            "delay": args.delay,
+            "jitter": args.jitter,
+            "topic": args.topic,
+            "seed": args.seed,
+            "output_dir": str(args.output_dir),
+            "uniform_delays": args.uniform_delays,
+        },
+        "frameworks": [row["framework"] for row in summary],
+        "simulated_profiles": {} if args.uniform_delays else SIMULATED_PROFILES,
+        "summary": summary,
+        "artifacts": [path.name for path in generated_files],
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-        fastest_html = (
-                f"<strong>{fastest['framework']}</strong> com {fastest['avg_total_s']:.4f}s"
-                if fastest
-                else "-"
-        )
-        slowest_html = (
-                f"<strong>{slowest['framework']}</strong> com {slowest['avg_total_s']:.4f}s"
-                if slowest
-                else "-"
+
+def _write_html_report(
+    path: Path,
+    summary: List[Dict[str, Any]],
+    args: argparse.Namespace,
+    results: List[RunResult],
+) -> None:
+    total_runs = len(results)
+    avg_total = _mean(item.total_s for item in results)
+    fastest = summary[0] if summary else None
+    slowest = summary[-1] if summary else None
+    frameworks = len(summary)
+    html_rows = []
+    for row in summary:
+        html_rows.append(
+            "<tr>"
+            f"<td>{row['framework']}</td>"
+            f"<td>{row['runs']}</td>"
+            f"<td>{row['avg_total_s']:.4f}</td>"
+            f"<td>{row['stdev_total_s']:.4f}</td>"
+            f"<td>{row['avg_api_calls']:.1f}</td>"
+            f"<td>{row['avg_research_s']:.4f}</td>"
+            f"<td>{row['avg_analysis_s']:.4f}</td>"
+            f"<td>{row['avg_report_s']:.4f}</td>"
+            "</tr>"
         )
 
-        html = f"""<!DOCTYPE html>
+    fastest_html = (
+        f"<strong>{fastest['framework']}</strong> com {fastest['avg_total_s']:.4f}s"
+        if fastest
+        else "-"
+    )
+    slowest_html = (
+        f"<strong>{slowest['framework']}</strong> com {slowest['avg_total_s']:.4f}s"
+        if slowest
+        else "-"
+    )
+
+    html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8" />
@@ -444,7 +516,7 @@ def _write_html_report(
         <section class="hero">
             <div class="eyebrow">Benchmark demo • {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
             <h1>Pipelines comparados com visual de dashboard</h1>
-            <p class="lead">Experimento local e reprodutível com três frameworks, usando chamadas simuladas para gerar métricas comparáveis sem depender de API externa.</p>
+            <p class="lead">Experimento local e reprodutível com três frameworks, usando perfis simulados de latência para gerar métricas comparáveis sem depender de API externa.</p>
             <div class="meta">
                 <div class="card"><div class="label">Frameworks</div><div class="value">{frameworks}</div><div class="sub">Vanilla, LangGraph e CrewAI</div></div>
                 <div class="card"><div class="label">Execuções</div><div class="value">{total_runs}</div><div class="sub">{args.runs} por framework</div></div>
@@ -473,15 +545,20 @@ def _write_html_report(
                 <img src="avg_total_time.png" alt="Gráfico de tempo médio total por framework" />
             </div>
             <div class="panel">
-                <h2>Tempo médio da etapa de pesquisa</h2>
-                <img src="avg_stage_time.png" alt="Gráfico da etapa de pesquisa por framework" />
+                <h2>Tempo médio por etapa</h2>
+                <img src="avg_stage_time.png" alt="Gráfico de tempo médio por etapa e framework" />
             </div>
         </div>
 
         <section class="section panel">
+            <h2>Etapas lado a lado</h2>
+            <img src="stage_side_by_side.png" alt="Gráfico comparando pesquisa, análise e relatório lado a lado por framework" />
+        </section>
+
+        <section class="section panel">
             <h2>Leitura rápida</h2>
             <p class="note">• `api_calls` fica em 3 em todos os frameworks porque cada pipeline tem três etapas.</p>
-            <p class="note">• O tempo total reflete o delay simulado mais o overhead estrutural de cada framework.</p>
+            <p class="note">• O tempo total reflete o delay simulado, pesos por etapa e overhead estrutural de cada framework.</p>
         </section>
 
         <div class="footer">Gerado por <code>experiments/benchmark_pipelines.py</code> • Artefatos em <code>artifacts/benchmark/</code></div>
@@ -489,7 +566,7 @@ def _write_html_report(
 </body>
 </html>"""
 
-        path.write_text(html, encoding="utf-8")
+    path.write_text(html, encoding="utf-8")
 
 
 def _load_font(size: int = 18):
@@ -575,8 +652,7 @@ def _draw_grouped_stage_chart(path: Path, summary: List[Dict[str, Any]]) -> None
     plot_w = width - 2 * margin_x
     plot_h = height - 2 * margin_y
 
-    categories = ["research_s", "analysis_s", "report_s"]
-    labels = ["Pesquisa", "Análise", "Relatório"]
+    categories = [key for key, _, _ in STAGE_METRICS]
     palette = {
         "Vanilla": ["#6d28d9", "#8b5cf6", "#c4b5fd"],
         "LangGraph": ["#2563eb", "#60a5fa", "#bfdbfe"],
@@ -629,12 +705,7 @@ def _draw_grouped_stage_chart(path: Path, summary: List[Dict[str, Any]]) -> None
 
     legend_x = margin_x
     legend_y = height - 46
-    legend_items = [
-        ("Pesquisa", "#6d28d9"),
-        ("Análise", "#2563eb"),
-        ("Relatório", "#0ea5e9"),
-    ]
-    for label, color in legend_items:
+    for _, label, color in STAGE_METRICS:
         draw.rounded_rectangle((legend_x, legend_y, legend_x + 18, legend_y + 18), radius=6, fill=_hex(color))
         draw.text((legend_x + 26, legend_y - 2), label, fill=_hex("#3a4253"), font=font_axis)
         legend_x += 150
@@ -648,12 +719,6 @@ def _draw_stage_matrix_chart(path: Path, summary: List[Dict[str, Any]]) -> None:
     margin_x, margin_y = 130, 150
     plot_w = width - 2 * margin_x
     plot_h = height - 2 * margin_y
-
-    stages = [
-        ("research_s", "Pesquisa", "#6d28d9"),
-        ("analysis_s", "Análise", "#2563eb"),
-        ("report_s", "Relatório", "#0ea5e9"),
-    ]
 
     image = Image.new("RGB", (width, height), _hex("#f7f9fc"))
     draw = ImageDraw.Draw(image)
@@ -670,7 +735,7 @@ def _draw_stage_matrix_chart(path: Path, summary: List[Dict[str, Any]]) -> None:
     draw.line((margin_x, margin_y, margin_x, margin_y + plot_h), fill=_hex("#3a4253"), width=2)
     draw.line((margin_x, margin_y + plot_h, margin_x + plot_w, margin_y + plot_h), fill=_hex("#3a4253"), width=2)
 
-    max_value = max((row[f"avg_{key}"] for row in summary for key, _, _ in stages), default=1.0)
+    max_value = max((row[f"avg_{key}"] for row in summary for key, _, _ in STAGE_METRICS), default=1.0)
     max_value *= 1.25
     for tick in range(1, 6):
         y = margin_y + int(plot_h - (plot_h / 5) * tick)
@@ -679,13 +744,13 @@ def _draw_stage_matrix_chart(path: Path, summary: List[Dict[str, Any]]) -> None:
 
     framework_count = len(summary)
     group_w = plot_w / max(1, framework_count)
-    bar_w = min(72, (group_w - 40) / len(stages))
+    bar_w = min(72, (group_w - 40) / len(STAGE_METRICS))
     x = margin_x + 18
 
     for row in summary:
         group_center = x + group_w / 2
-        start_x = group_center - ((len(stages) * bar_w) + (len(stages) - 1) * 18) / 2
-        for idx, (key, _, color) in enumerate(stages):
+        start_x = group_center - ((len(STAGE_METRICS) * bar_w) + (len(STAGE_METRICS) - 1) * 18) / 2
+        for idx, (key, _, color) in enumerate(STAGE_METRICS):
             value = float(row[f"avg_{key}"])
             bar_h = 0 if max_value == 0 else int((value / max_value) * plot_h)
             left = start_x + idx * (bar_w + 18)
@@ -698,7 +763,7 @@ def _draw_stage_matrix_chart(path: Path, summary: List[Dict[str, Any]]) -> None:
 
     legend_x = margin_x
     legend_y = height - 46
-    for _, label, color in stages:
+    for _, label, color in STAGE_METRICS:
         draw.rounded_rectangle((legend_x, legend_y, legend_x + 18, legend_y + 18), radius=6, fill=_hex(color))
         draw.text((legend_x + 26, legend_y - 2), label, fill=_hex("#3a4253"), font=font_axis)
         legend_x += 160
@@ -722,20 +787,35 @@ def _run_one(agent_factory: Callable[[], Any], framework: str, run_index: int, t
     )
 
 
-def _factory_map(delay: float, jitter: float) -> Dict[str, Callable[[], Any]]:
+def _factory_map_with_profiles(args: argparse.Namespace) -> Dict[str, Callable[[], Any]]:
     return {
-        "Vanilla": lambda: VanillaBenchmarkAgent(delay, jitter),
-        "LangGraph": lambda: LangGraphBenchmarkAgent(delay, jitter),
-        "CrewAI": lambda: CrewAIBenchmarkAgent(delay, jitter),
+        "Vanilla": lambda: VanillaBenchmarkAgent(args.delay, args.jitter, args.uniform_delays),
+        "LangGraph": lambda: LangGraphBenchmarkAgent(args.delay, args.jitter, args.uniform_delays),
+        "CrewAI": lambda: CrewAIBenchmarkAgent(args.delay, args.jitter, args.uniform_delays),
     }
 
 
+def _validate_args(args: argparse.Namespace) -> None:
+    if args.runs < 1:
+        raise ValueError("--runs deve ser maior ou igual a 1")
+    if args.delay < 0:
+        raise ValueError("--delay não pode ser negativo")
+    if args.jitter < 0:
+        raise ValueError("--jitter não pode ser negativo")
+    if args.jitter > args.delay and args.delay > 0:
+        raise ValueError("--jitter não deve ser maior que --delay")
+    if not args.topic.strip():
+        raise ValueError("--topic não pode ser vazio")
+
+
 def run_benchmark(args: argparse.Namespace) -> None:
+    _validate_args(args)
     random.seed(args.seed)
-    ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     results: List[RunResult] = []
-    factories = _factory_map(args.delay, args.jitter)
+    factories = _factory_map_with_profiles(args)
     topic = args.topic
 
     for framework, factory in factories.items():
@@ -744,22 +824,35 @@ def run_benchmark(args: argparse.Namespace) -> None:
 
     summary = _summarize(results)
 
-    _write_csv(ARTIFACTS_DIR / "benchmark_results.csv", results, summary)
-    _write_markdown(ARTIFACTS_DIR / "benchmark_report.md", summary, args)
-    _write_table_markdown(ARTIFACTS_DIR / "benchmark_table.md", summary, args, results)
-    _write_html_report(ARTIFACTS_DIR / "benchmark_dashboard.html", summary, args, results)
+    generated_files = [
+        output_dir / "benchmark_results.csv",
+        output_dir / "benchmark_report.md",
+        output_dir / "benchmark_table.md",
+        output_dir / "benchmark_dashboard.html",
+        output_dir / "avg_total_time.png",
+        output_dir / "avg_stage_time.png",
+        output_dir / "stage_side_by_side.png",
+        output_dir / "benchmark_manifest.json",
+    ]
+
+    _write_csv(generated_files[0], results, summary)
+    _write_markdown(generated_files[1], summary, args)
+    _write_table_markdown(generated_files[2], summary, args, results)
+    _write_html_report(generated_files[3], summary, args, results)
 
     _draw_bar_chart(
-        ARTIFACTS_DIR / "avg_total_time.png",
+        generated_files[4],
         "Tempo médio total por framework",
         [row["framework"] for row in summary],
         [row["avg_total_s"] for row in summary],
         "s",
     )
-    _draw_grouped_stage_chart(ARTIFACTS_DIR / "avg_stage_time.png", summary)
-    _draw_stage_matrix_chart(ARTIFACTS_DIR / "stage_side_by_side.png", summary)
+    _draw_grouped_stage_chart(generated_files[5], summary)
+    _draw_stage_matrix_chart(generated_files[6], summary)
+    _write_manifest(generated_files[7], summary, args, generated_files)
 
-    print(f"Benchmark concluído. Artefatos em: {ARTIFACTS_DIR}")
+    print(f"Benchmark concluído. Artefatos em: {output_dir}")
+    print(f"Dashboard: {output_dir / 'benchmark_dashboard.html'}")
     for row in summary:
         print(
             f"- {row['framework']}: avg_total={row['avg_total_s']:.4f}s, "
@@ -774,13 +867,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--jitter", type=float, default=0.005, help="Variação aleatória opcional no delay")
     parser.add_argument("--topic", type=str, default="Impacto da IA na educação brasileira", help="Tópico do benchmark")
     parser.add_argument("--seed", type=int, default=42, help="Seed para reprodutibilidade")
+    parser.add_argument("--output-dir", type=Path, default=ARTIFACTS_DIR, help="Pasta onde os artefatos serão gerados")
+    parser.add_argument(
+        "--uniform-delays",
+        action="store_true",
+        help="Usa o mesmo delay para todos os frameworks e etapas, reproduzindo o modo neutro antigo",
+    )
     return parser
 
 
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
-    run_benchmark(args)
+    try:
+        run_benchmark(args)
+    except ValueError as exc:
+        parser.error(str(exc))
 
 
 if __name__ == "__main__":
