@@ -444,7 +444,7 @@ def _write_html_report(
         <section class="hero">
             <div class="eyebrow">Benchmark demo • {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
             <h1>Pipelines comparados com visual de dashboard</h1>
-            <p class="lead">Experimento local e reprodutível com três frameworks, usando chamadas simuladas para gerar métricas comparáveis sem depender de API externa. O objetivo é produzir material pronto para apresentação: gráfico, tabela, resumo e outputs exportáveis.</p>
+            <p class="lead">Experimento local e reprodutível com três frameworks, usando chamadas simuladas para gerar métricas comparáveis sem depender de API externa.</p>
             <div class="meta">
                 <div class="card"><div class="label">Frameworks</div><div class="value">{frameworks}</div><div class="sub">Vanilla, LangGraph e CrewAI</div></div>
                 <div class="card"><div class="label">Execuções</div><div class="value">{total_runs}</div><div class="sub">{args.runs} por framework</div></div>
@@ -482,7 +482,6 @@ def _write_html_report(
             <h2>Leitura rápida</h2>
             <p class="note">• `api_calls` fica em 3 em todos os frameworks porque cada pipeline tem três etapas.</p>
             <p class="note">• O tempo total reflete o delay simulado mais o overhead estrutural de cada framework.</p>
-            <p class="note">• Os arquivos gerados podem ser usados diretamente em apresentação, relatório ou defesa.</p>
         </section>
 
         <div class="footer">Gerado por <code>experiments/benchmark_pipelines.py</code> • Artefatos em <code>artifacts/benchmark/</code></div>
