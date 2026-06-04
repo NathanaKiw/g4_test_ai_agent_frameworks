@@ -100,7 +100,7 @@ start_crewai --topic "Impacto da IA na educação brasileira"
 
 Os testes não fazem chamadas reais à API.
 
-Os testes não fazem chamadas reais à API. Use um destes comandos conforme seu sistema:
+Use um destes comandos conforme seu sistema:
 
 - macOS / Linux:
 
@@ -118,11 +118,26 @@ python -m unittest discover -s tests
 Resultado esperado:
 
 ```text
-Ran 5 tests
+Ran 7 tests
 OK
 ```
 
-## 7. Erros comuns
+## 7. Experimento / demo com gráficos
+
+Para gerar métricas quantitativas e gráficos PNG dos três pipelines, execute:
+
+```powershell
+python experiments/benchmark_pipelines.py --runs 5 --delay 0.02 --jitter 0.005
+```
+
+Artefatos gerados em `artifacts/benchmark/`:
+
+- `benchmark_results.csv` com os valores por execução
+- `benchmark_report.md` com o resumo consolidado
+- `avg_total_time.png` com o tempo médio total por framework
+- `avg_stage_time.png` com o tempo médio da etapa de pesquisa
+
+## 8. Erros comuns
 
 ### GROQ_API_KEY ausente
 
@@ -147,7 +162,7 @@ a chave chegou à API, mas a conta/projeto Groq está sem créditos ou billing
 ativo. Verifique o billing da conta na plataforma da Groq antes de rodar
 novamente.
 
-## 8. O que cada comando executa
+## 9. O que cada comando executa
 
 | Comando | Implementação | Descrição |
 |---------|---------------|-----------|
