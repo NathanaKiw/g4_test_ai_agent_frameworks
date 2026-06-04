@@ -1,3 +1,10 @@
+"""Unit tests for the vanilla research pipeline.
+
+These tests verify the baseline pipeline contract (three LLM steps,
+timings, result shape) and error detection logic for retryable
+vs non-retryable API errors.
+"""
+
 import unittest
 from unittest.mock import patch
 
@@ -37,6 +44,9 @@ class StubResearchReportAgent(ResearchReportAgent):
 
 class VanillaPipelineTest(unittest.TestCase):
     def test_pipeline_returns_standard_benchmark_result(self):
+        """The pipeline should execute three LLM stages and return a
+        standardized result dictionary with timings and metadata.
+        """
         result = StubResearchReportAgent().run_research_pipeline("tema teste")
 
         self.assertEqual(result["framework"], "Vanilla (Groq API)")
@@ -62,6 +72,10 @@ class VanillaPipelineTest(unittest.TestCase):
 
 class ResearchDataServiceTest(unittest.TestCase):
     def test_mongodb_is_disabled_when_uri_is_not_configured(self):
+        """If `MONGODB_URI` is empty, the ResearchDataService should be
+        disabled (no client/collection) to avoid accidental DB connections
+        during tests or when persistence is not configured.
+        """
         with patch.dict("os.environ", {"MONGODB_URI": ""}):
             service = ResearchDataService()
 
@@ -72,6 +86,10 @@ class ResearchDataServiceTest(unittest.TestCase):
 
 class RetryPolicyTest(unittest.TestCase):
     def test_insufficient_quota_rate_limit_is_not_retryable(self):
+        """Simulate a rate-limit exception carrying an
+        `insufficient_quota` error code. The retry predicate must classify
+        this as non-retryable so callers can surface a clear quota error.
+        """
         class FakeRateLimitError(Exception):
             pass
 

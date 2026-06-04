@@ -1,3 +1,10 @@
+"""Unit tests for LangGraph and CrewAI pipeline behaviors.
+
+These tests validate the LangGraph orchestration contract (three-stage
+pipeline with timings) and CrewAI-specific metrics and error handling
+for insufficient quota scenarios.
+"""
+
 import unittest
 
 from test_crewai.research_agent import (
@@ -24,6 +31,8 @@ class StubLogger:
 
 
 class StubLangGraphAgent(LangGraphResearchReportAgent):
+    """A LangGraph agent variant that stubs LLM calls for deterministic tests."""
+
     def __init__(self):
         self._last_api_calls = 0
         self.research_service = StubResearchService()
@@ -31,12 +40,17 @@ class StubLangGraphAgent(LangGraphResearchReportAgent):
         self.graph = self._build_graph()
 
     def _chat(self, system_content, user_content):
+        # Return predictable stub responses and count API call attempts.
         self._last_api_calls += 1
         return f"stub response {self._last_api_calls}"
 
 
 class LangGraphPipelineTest(unittest.TestCase):
     def test_pipeline_returns_standard_benchmark_result(self):
+        """LangGraph pipeline should produce the same benchmark-shaped result
+        as the vanilla baseline: three LLM calls, framework metadata and
+        per-stage timings.
+        """
         result = StubLangGraphAgent().run_research_pipeline("tema teste")
 
         self.assertEqual(result["framework"], "LangGraph")
@@ -62,6 +76,9 @@ class LangGraphPipelineTest(unittest.TestCase):
 
 class CrewAIMetricsTest(unittest.TestCase):
     def test_task_callback_records_stage_timings(self):
+        """Verify that the CrewAI task callback increments API call count and
+        records per-stage timings when invoked for each task.
+        """
         agent = object.__new__(CrewAIResearchReportAgent)
         agent._last_api_calls = 0
 
@@ -78,6 +95,9 @@ class CrewAIMetricsTest(unittest.TestCase):
         )
 
     def test_insufficient_quota_error_is_detected(self):
+        """Detect when a raised exception contains an `insufficient_quota`
+        error code in its `body` payload.
+        """
         class FakeRateLimitError(Exception):
             pass
 
@@ -87,6 +107,9 @@ class CrewAIMetricsTest(unittest.TestCase):
         self.assertTrue(_is_insufficient_quota_error(exc))
 
     def test_run_research_pipeline_wraps_insufficient_quota(self):
+        """If the Crew kickoff raises an insufficient-quota error, the
+        pipeline should raise a `ValueError` with a clear message.
+        """
         class FakeRateLimitError(Exception):
             pass
 
