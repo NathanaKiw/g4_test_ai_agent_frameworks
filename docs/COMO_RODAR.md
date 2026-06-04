@@ -127,15 +127,20 @@ OK
 Para gerar métricas quantitativas e gráficos PNG dos três pipelines, execute:
 
 ```powershell
-python experiments/benchmark_pipelines.py --runs 5 --delay 0.02 --jitter 0.005
+python experiments/benchmark_pipelines.py --runs 10 --delay 0.02 --jitter 0.005
 ```
 
 Artefatos gerados em `artifacts/benchmark/`:
 
+- `benchmark_dashboard.html` com o resumo visual pronto para apresentação
+- `benchmark_table.md` com a tabela pronta para colar no relatório
 - `benchmark_results.csv` com os valores por execução
 - `benchmark_report.md` com o resumo consolidado
 - `avg_total_time.png` com o tempo médio total por framework
-- `avg_stage_time.png` com o tempo médio da etapa de pesquisa
+- `avg_stage_time.png` com o comparativo visual das três etapas
+- `stage_side_by_side.png` com as três etapas lado a lado por framework
+
+Se quiser uma demo mais bonita para mostrar, abra `benchmark_dashboard.html` no navegador. O arquivo já traz cards, tabela resumida e os gráficos incorporados.
 
 ## 8. Erros comuns
 
