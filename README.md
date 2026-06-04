@@ -55,7 +55,7 @@ g4_test_ai_agent_frameworks/
 │   ├── CASO_DE_USO.md
 │   └── COMO_RODAR.md
 ├── experiments/
-│   └── benchmark_pipelines.py  # Experimento simulado que gera métricas e gráficos
+│   └── benchmark_pipelines.py  # Benchmark real que gera métricas e gráficos
 ├── requirements.txt
 ├── setup.sh                    # Setup para macOS / Linux
 ├── setup.ps1                   # Setup para Windows
@@ -153,20 +153,18 @@ python -m unittest discover -s tests
 
 ## Experimento com gráficos
 
-Além dos comandos reais dos agentes, o projeto inclui um experimento local em
-`experiments/benchmark_pipelines.py` para demonstrar a comparação visual entre
-Vanilla, LangGraph e CrewAI. Esse experimento usa chamadas LLM simuladas, então
-não consome quota de API e permite gerar métricas reproduzíveis para apresentação
-ou relatório.
+Além dos comandos individuais dos agentes, o projeto inclui um experimento em
+`experiments/benchmark_pipelines.py` para comparar visualmente Vanilla,
+LangGraph e CrewAI. No modo padrão, ele executa os pipelines reais, coleta as
+métricas retornadas por cada implementação e gera tabelas, relatório, dashboard
+HTML e gráficos PNG.
 
 ```bash
-python experiments/benchmark_pipelines.py --runs 10 --delay 0.02 --jitter 0.005
+python experiments/benchmark_pipelines.py --runs 1 --topic "Impacto da IA na educação brasileira"
 ```
 
+Esse comando faz chamadas reais à API configurada no `.env` e consome quota.
 Use `--output-dir caminho/da/pasta` para salvar os artefatos em outro local.
-Por padrão, o benchmark usa perfis simulados por framework e por etapa para que
-os gráficos mostrem diferenças visuais controladas. Use `--uniform-delays` para
-reproduzir o modo neutro, com o mesmo delay em todas as etapas.
 
 O comando gera os artefatos em `artifacts/benchmark/`:
 

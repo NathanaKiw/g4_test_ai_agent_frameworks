@@ -122,52 +122,45 @@ Ran 7 tests
 OK
 ```
 
-## 7. Experimento / demo com gráficos
+## 7. Experimento / benchmark com gráficos
 
-O projeto também possui um experimento local para comparar visualmente os três
-pipelines: Vanilla, LangGraph e CrewAI. Esse experimento roda versões simuladas
-das etapas de pesquisa, análise e relatório, então serve para gerar métricas e
-gráficos de demonstração sem fazer chamadas reais à API e sem consumir quota da
-Groq.
+O projeto também possui um experimento para comparar visualmente os três
+pipelines: Vanilla, LangGraph e CrewAI. Por padrão, ele executa as
+implementações reais dos agentes, coleta as métricas retornadas por cada
+pipeline (`api_calls`, `research_s`, `analysis_s`, `report_s` e `total_s`) e
+gera gráficos a partir desses dados.
+
+Este modo faz chamadas reais à API configurada no `.env`, então requer uma
+`GROQ_API_KEY` válida e consome quota/créditos da conta.
 
 Execute o comando abaixo com o ambiente virtual ativado:
 
 macOS / Linux:
 
 ```bash
-python experiments/benchmark_pipelines.py --runs 10 --delay 0.02 --jitter 0.005
+python experiments/benchmark_pipelines.py --runs 1 --topic "Impacto da IA na educação brasileira"
 ```
 
 Windows PowerShell:
 
 ```powershell
-python experiments/benchmark_pipelines.py --runs 10 --delay 0.02 --jitter 0.005
+python experiments/benchmark_pipelines.py --runs 1 --topic "Impacto da IA na educação brasileira"
 ```
 
 O que esse comando faz:
 
-- executa cada pipeline 10 vezes;
-- simula latências diferentes por framework e por etapa;
+- executa Vanilla, LangGraph e CrewAI usando a API real;
+- coleta os tempos medidos por cada implementação;
 - calcula médias de tempo total e tempo por etapa;
 - gera tabelas, CSV, relatório Markdown, dashboard HTML e gráficos PNG.
-
-Por padrão, o experimento usa perfis simulados para deixar a comparação mais
-visual: Vanilla recebe menor overhead, LangGraph recebe overhead intermediário e
-CrewAI recebe overhead um pouco maior por representar uma orquestração
-multiagente sequencial. Esses valores são artificiais e servem apenas para
-demonstração dos gráficos, não como medição real de performance da API.
 
 Parâmetros principais:
 
 | Parâmetro | Descrição |
 |-----------|-----------|
-| `--runs 10` | Define quantas execuções serão feitas para cada framework |
-| `--delay 0.02` | Define o tempo simulado de cada chamada LLM, em segundos |
-| `--jitter 0.005` | Adiciona uma pequena variação aleatória ao tempo simulado |
+| `--runs 1` | Define quantas execuções serão feitas para cada framework |
 | `--topic "..."` | Altera o tópico usado como entrada do benchmark |
-| `--seed 42` | Mantém os resultados reproduzíveis entre execuções |
 | `--output-dir artifacts/benchmark` | Define a pasta onde os arquivos serão salvos |
-| `--uniform-delays` | Usa o mesmo delay para todos os frameworks e etapas |
 
 Depois da execução, os arquivos ficam em `artifacts/benchmark/`:
 

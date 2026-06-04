@@ -1,15 +1,15 @@
-"""Benchmark/demo dos três pipelines do projeto.
+"""Benchmark dos três pipelines reais do projeto.
 
-O experimento roda os pipelines com chamadas LLM simuladas para gerar
-métricas comparáveis sem depender de API externa. Ele produz:
+O experimento roda os pipelines implementados no projeto e usa as métricas
+retornadas por eles para gerar comparativos visuais. Ele produz:
 - CSV com métricas por execução
 - resumo em Markdown
 - dashboard HTML com visual mais polido
 - gráficos PNG com comparativos de tempo total e por etapa
 
 Uso:
-    python experiments/benchmark_pipelines.py --runs 5 --delay 0.02
-    python experiments/benchmark_pipelines.py --runs 10 --delay 0.02
+    python experiments/benchmark_pipelines.py --runs 1
+    python experiments/benchmark_pipelines.py --runs 3 --topic "Impacto da IA na educação brasileira"
 """
 
 from __future__ import annotations
@@ -17,9 +17,8 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import random
+import os
 import statistics
-import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -35,33 +34,19 @@ STAGE_METRICS = [
     ("analysis_s", "Análise", "#2563eb"),
     ("report_s", "Relatório", "#0ea5e9"),
 ]
-SIMULATED_PROFILES = {
-    "Vanilla": {
-        "description": "Chamadas diretas com menor overhead de orquestração",
-        "framework_multiplier": 0.90,
-        "stage_multipliers": [1.35, 0.80, 1.05],
-        "overhead_s": 0.002,
-    },
-    "LangGraph": {
-        "description": "Grafo explícito com overhead intermediário de coordenação",
-        "framework_multiplier": 1.20,
-        "stage_multipliers": [1.55, 1.05, 1.30],
-        "overhead_s": 0.004,
-    },
-    "CrewAI": {
-        "description": "Orquestração multiagente sequencial com maior overhead simulado",
-        "framework_multiplier": 1.45,
-        "stage_multipliers": [1.75, 1.25, 1.50],
-        "overhead_s": 0.006,
-    },
-}
 
 
 def _ensure_import_paths() -> None:
     import sys
 
+    root_path = str(ROOT)
+    cwd_path = str(Path.cwd().resolve())
+    sys.path = [
+        path for path in sys.path
+        if path not in ("", root_path) and str(Path(path).resolve()) != cwd_path
+    ]
+
     paths = [
-        str(ROOT),
         str(ROOT / "common"),
         str(ROOT / "vanilla"),
         str(ROOT / "langgraph_pipeline"),
@@ -72,11 +57,25 @@ def _ensure_import_paths() -> None:
             sys.path.insert(0, path)
 
 
-_ensure_import_paths()
+def _load_env(path: Path) -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        if not path.exists():
+            return
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            os.environ[key.strip()] = value.strip().strip('"').strip("'")
+        return
 
-from test_vanilla.research_agent import ResearchReportAgent as VanillaAgent  # noqa: E402
-from test_langgraph.research_agent import LangGraphResearchReportAgent  # noqa: E402
-from test_crewai.research_agent import CrewAIResearchReportAgent  # noqa: E402
+    load_dotenv(path, override=True)
+
+
+_ensure_import_paths()
+_load_env(ROOT / ".env")
 
 
 @dataclass
@@ -88,149 +87,6 @@ class RunResult:
     research_s: float
     analysis_s: float
     report_s: float
-
-
-class BenchmarkResearchService:
-    def insert_research_report(self, report_data: Dict[str, Any]) -> None:
-        return None
-
-    def close(self) -> None:
-        return None
-
-
-class BenchmarkLogger:
-    def info(self, *args, **kwargs) -> None:
-        return None
-
-    def warning(self, *args, **kwargs) -> None:
-        return None
-
-
-class BaseBenchmarkAgent:
-    framework_name = "Base"
-
-    def __init__(self, delay_s: float, jitter_s: float = 0.0, uniform_delays: bool = False) -> None:
-        self.delay_s = delay_s
-        self.jitter_s = jitter_s
-        self.uniform_delays = uniform_delays
-
-    def _delay_for_stage(self, stage_index: int) -> float:
-        if self.uniform_delays:
-            return self.delay_s
-
-        profile = SIMULATED_PROFILES.get(self.framework_name, {})
-        framework_multiplier = float(profile.get("framework_multiplier", 1.0))
-        stage_multipliers = profile.get("stage_multipliers", [1.0, 1.0, 1.0])
-        overhead_s = float(profile.get("overhead_s", 0.0))
-        stage_multiplier = float(stage_multipliers[min(stage_index, len(stage_multipliers) - 1)])
-        return (self.delay_s * framework_multiplier * stage_multiplier) + overhead_s
-
-    def _sleep_for_stage(self, stage_index: int) -> None:
-        delay = self._delay_for_stage(stage_index)
-        if self.jitter_s:
-            delay += random.uniform(-self.jitter_s, self.jitter_s)
-            delay = max(0.0, delay)
-        if delay:
-            time.sleep(delay)
-
-
-class VanillaBenchmarkAgent(BaseBenchmarkAgent, VanillaAgent):
-    framework_name = "Vanilla"
-
-    def __init__(self, delay_s: float, jitter_s: float = 0.0, uniform_delays: bool = False) -> None:
-        BaseBenchmarkAgent.__init__(self, delay_s, jitter_s, uniform_delays)
-        self._last_api_calls = 0
-        self.research_service = BenchmarkResearchService()
-        self.logger = BenchmarkLogger()
-
-    def _chat(self, system_content: str, user_content: str) -> str:
-        self._last_api_calls += 1
-        self._sleep_for_stage(self._last_api_calls - 1)
-        return f"{self.framework_name} response {self._last_api_calls}"
-
-
-class LangGraphBenchmarkAgent(BaseBenchmarkAgent, LangGraphResearchReportAgent):
-    framework_name = "LangGraph"
-
-    def __init__(self, delay_s: float, jitter_s: float = 0.0, uniform_delays: bool = False) -> None:
-        BaseBenchmarkAgent.__init__(self, delay_s, jitter_s, uniform_delays)
-        self._last_api_calls = 0
-        self.research_service = BenchmarkResearchService()
-        self.logger = BenchmarkLogger()
-        self.graph = self._build_graph()
-
-    def _chat(self, system_content: str, user_content: str) -> str:
-        self._last_api_calls += 1
-        self._sleep_for_stage(self._last_api_calls - 1)
-        return f"{self.framework_name} response {self._last_api_calls}"
-
-
-class CrewAIBenchmarkAgent(BaseBenchmarkAgent, CrewAIResearchReportAgent):
-    framework_name = "CrewAI"
-
-    def __init__(self, delay_s: float, jitter_s: float = 0.0, uniform_delays: bool = False) -> None:
-        BaseBenchmarkAgent.__init__(self, delay_s, jitter_s, uniform_delays)
-        self._last_api_calls = 0
-        self.research_service = BenchmarkResearchService()
-        self.logger = BenchmarkLogger()
-        self.Crew = lambda **kwargs: FakeCrew(  # noqa: E731
-            stage_delays=[self._delay_for_stage(index) for index in range(len(STAGE_METRICS))],
-            jitter_s=self.jitter_s,
-            **kwargs,
-        )
-        self.Process = type("Process", (), {"sequential": object()})
-
-    def _build_agents(self):
-        class FakeAgent:
-            def __init__(self, **kwargs):
-                self.kwargs = kwargs
-
-        return FakeAgent(role="Pesquisador"), FakeAgent(role="Analista"), FakeAgent(role="Redator Executivo")
-
-    def _build_tasks(self, topic: str, stage_timings: Dict[str, float]):
-        agent1, agent2, agent3 = self._build_agents()
-        callback = self._task_callback_factory(stage_timings)
-
-        class FakeTask:
-            def __init__(self, output: str, callback=None):
-                self.output = type("Output", (), {"raw": output})()
-                self.callback = callback
-
-        return (
-            [
-                FakeTask("research", callback),
-                FakeTask("analysis", callback),
-                FakeTask("report", callback),
-            ],
-            [agent1, agent2, agent3],
-        )
-
-
-class FakeCrew:
-    def __init__(self, agents, tasks, process, verbose=False, stage_delays=None, jitter_s=0.0):
-        self.agents = agents
-        self.tasks = tasks
-        self.process = process
-        self.verbose = verbose
-        self.stage_delays = stage_delays or [0.0, 0.0, 0.0]
-        self.jitter_s = jitter_s
-
-    def _sleep_for_stage(self, stage_index: int) -> None:
-        delay = self.stage_delays[min(stage_index, len(self.stage_delays) - 1)]
-        if self.jitter_s:
-            delay += random.uniform(-self.jitter_s, self.jitter_s)
-            delay = max(0.0, delay)
-        if delay:
-            time.sleep(delay)
-
-    def kickoff(self, inputs: Dict[str, Any]):
-        # Simula execução sequencial dos três tasks e aciona callbacks.
-        for index, task in enumerate(self.tasks):
-            self._sleep_for_stage(index)
-            callback = getattr(task, "callback", None)
-            if callback:
-                callback(task)
-        return None
 
 
 def _format_float(value: float) -> str:
@@ -304,10 +160,8 @@ def _write_markdown(path: Path, summary: List[Dict[str, Any]], args: argparse.Na
         "# Benchmark dos pipelines",
         "",
         f"Data da execução: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "Modo: pipelines reais com chamadas de API",
         f"Execuções por framework: {args.runs}",
-        f"Delay simulado por chamada: {args.delay:.3f}s",
-        f"Jitter opcional: {args.jitter:.3f}s",
-        f"Modo de delay: {'uniforme' if args.uniform_delays else 'perfis simulados por framework'}",
         "",
         "## Resumo",
         "",
@@ -323,7 +177,7 @@ def _write_markdown(path: Path, summary: List[Dict[str, Any]], args: argparse.Na
         "## Interpretação",
         "",
         "- `api_calls` fica em 3 porque cada pipeline faz três etapas.",
-        "- O tempo total reflete o delay simulado, os pesos por etapa e o overhead de cada framework.",
+        "- O tempo total reflete chamadas reais à API configurada no `.env`.",
         "- Os gráficos mostram as médias consolidadas por framework.",
     ])
     path.write_text("\n".join(lines), encoding="utf-8")
@@ -338,8 +192,8 @@ def _write_table_markdown(
         "# Tabela do experimento",
         "",
         f"Data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        "Modo: pipelines reais com chamadas de API",
         f"Execuções por framework: {args.runs}",
-        f"Modo de delay: {'uniforme' if args.uniform_delays else 'perfis simulados por framework'}",
         "",
         "| Framework | Execuções | Tempo médio total (s) | Desvio padrão (s) | API calls média | Pesquisa | Análise | Relatório |",
         "|---|---:|---:|---:|---:|---:|---:|---:|",
@@ -368,15 +222,10 @@ def _write_manifest(
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "parameters": {
             "runs": args.runs,
-            "delay": args.delay,
-            "jitter": args.jitter,
             "topic": args.topic,
-            "seed": args.seed,
             "output_dir": str(args.output_dir),
-            "uniform_delays": args.uniform_delays,
         },
         "frameworks": [row["framework"] for row in summary],
-        "simulated_profiles": {} if args.uniform_delays else SIMULATED_PROFILES,
         "summary": summary,
         "artifacts": [path.name for path in generated_files],
     }
@@ -419,6 +268,8 @@ def _write_html_report(
         if slowest
         else "-"
     )
+    mode_text = "Chamadas reais à API configurada"
+    timing_note = "O tempo total reflete as chamadas reais à API configurada no arquivo .env."
 
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -514,9 +365,9 @@ def _write_html_report(
 <body>
     <div class="wrap">
         <section class="hero">
-            <div class="eyebrow">Benchmark demo • {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
+            <div class="eyebrow">Benchmark • {mode_text} • {datetime.now().strftime('%Y-%m-%d %H:%M')}</div>
             <h1>Pipelines comparados com visual de dashboard</h1>
-            <p class="lead">Experimento local e reprodutível com três frameworks, usando perfis simulados de latência para gerar métricas comparáveis sem depender de API externa.</p>
+            <p class="lead">Experimento local e reprodutível com três frameworks, usando as métricas retornadas pelos pipelines para gerar comparativos visuais.</p>
             <div class="meta">
                 <div class="card"><div class="label">Frameworks</div><div class="value">{frameworks}</div><div class="sub">Vanilla, LangGraph e CrewAI</div></div>
                 <div class="card"><div class="label">Execuções</div><div class="value">{total_runs}</div><div class="sub">{args.runs} por framework</div></div>
@@ -558,7 +409,7 @@ def _write_html_report(
         <section class="section panel">
             <h2>Leitura rápida</h2>
             <p class="note">• `api_calls` fica em 3 em todos os frameworks porque cada pipeline tem três etapas.</p>
-            <p class="note">• O tempo total reflete o delay simulado, pesos por etapa e overhead estrutural de cada framework.</p>
+            <p class="note">• {timing_note}</p>
         </section>
 
         <div class="footer">Gerado por <code>experiments/benchmark_pipelines.py</code> • Artefatos em <code>artifacts/benchmark/</code></div>
@@ -774,7 +625,12 @@ def _draw_stage_matrix_chart(path: Path, summary: List[Dict[str, Any]]) -> None:
 
 def _run_one(agent_factory: Callable[[], Any], framework: str, run_index: int, topic: str) -> RunResult:
     agent = agent_factory()
-    result = agent.run_research_pipeline(topic)
+    try:
+        result = agent.run_research_pipeline(topic)
+    finally:
+        close = getattr(agent, "close", None)
+        if callable(close):
+            close()
     timings = result.get("stage_timings", {})
     return RunResult(
         framework=framework,
@@ -787,35 +643,39 @@ def _run_one(agent_factory: Callable[[], Any], framework: str, run_index: int, t
     )
 
 
-def _factory_map_with_profiles(args: argparse.Namespace) -> Dict[str, Callable[[], Any]]:
+def _factory_map() -> Dict[str, Callable[[], Any]]:
+    try:
+        from test_vanilla.research_agent import ResearchReportAgent as VanillaAgent
+        from test_langgraph.research_agent import LangGraphResearchReportAgent
+        from test_crewai.research_agent import CrewAIResearchReportAgent
+    except ImportError as exc:
+        raise ImportError(
+            "Dependências reais do benchmark não estão instaladas. "
+            "Rode `pip install -r requirements.txt` e "
+            "`pip install -e ./common -e ./vanilla -e ./langgraph_pipeline -e ./crewai_pipeline`."
+        ) from exc
+
     return {
-        "Vanilla": lambda: VanillaBenchmarkAgent(args.delay, args.jitter, args.uniform_delays),
-        "LangGraph": lambda: LangGraphBenchmarkAgent(args.delay, args.jitter, args.uniform_delays),
-        "CrewAI": lambda: CrewAIBenchmarkAgent(args.delay, args.jitter, args.uniform_delays),
+        "Vanilla": VanillaAgent,
+        "LangGraph": LangGraphResearchReportAgent,
+        "CrewAI": CrewAIResearchReportAgent,
     }
 
 
 def _validate_args(args: argparse.Namespace) -> None:
     if args.runs < 1:
         raise ValueError("--runs deve ser maior ou igual a 1")
-    if args.delay < 0:
-        raise ValueError("--delay não pode ser negativo")
-    if args.jitter < 0:
-        raise ValueError("--jitter não pode ser negativo")
-    if args.jitter > args.delay and args.delay > 0:
-        raise ValueError("--jitter não deve ser maior que --delay")
     if not args.topic.strip():
         raise ValueError("--topic não pode ser vazio")
 
 
 def run_benchmark(args: argparse.Namespace) -> None:
     _validate_args(args)
-    random.seed(args.seed)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     results: List[RunResult] = []
-    factories = _factory_map_with_profiles(args)
+    factories = _factory_map()
     topic = args.topic
 
     for framework, factory in factories.items():
@@ -861,18 +721,10 @@ def run_benchmark(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Benchmark/demo dos pipelines do projeto")
-    parser.add_argument("--runs", type=int, default=10, help="Número de execuções por framework")
-    parser.add_argument("--delay", type=float, default=0.02, help="Delay simulado por chamada LLM em segundos")
-    parser.add_argument("--jitter", type=float, default=0.005, help="Variação aleatória opcional no delay")
+    parser = argparse.ArgumentParser(description="Benchmark dos pipelines reais do projeto")
+    parser.add_argument("--runs", type=int, default=1, help="Número de execuções por framework")
     parser.add_argument("--topic", type=str, default="Impacto da IA na educação brasileira", help="Tópico do benchmark")
-    parser.add_argument("--seed", type=int, default=42, help="Seed para reprodutibilidade")
     parser.add_argument("--output-dir", type=Path, default=ARTIFACTS_DIR, help="Pasta onde os artefatos serão gerados")
-    parser.add_argument(
-        "--uniform-delays",
-        action="store_true",
-        help="Usa o mesmo delay para todos os frameworks e etapas, reproduzindo o modo neutro antigo",
-    )
     return parser
 
 
@@ -881,7 +733,7 @@ def main() -> None:
     args = parser.parse_args()
     try:
         run_benchmark(args)
-    except ValueError as exc:
+    except (ImportError, ValueError) as exc:
         parser.error(str(exc))
 
 
