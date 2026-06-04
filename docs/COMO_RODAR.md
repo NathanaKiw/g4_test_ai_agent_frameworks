@@ -100,8 +100,19 @@ start_crewai --topic "Impacto da IA na educação brasileira"
 
 Os testes não fazem chamadas reais à API.
 
+Os testes não fazem chamadas reais à API. Use um destes comandos conforme seu sistema:
+
+- macOS / Linux:
+
 ```bash
 PYTHONPATH=common:vanilla:langgraph_pipeline:crewai_pipeline python3 -m unittest discover -s tests
+```
+
+- Windows PowerShell (venv ativado):
+
+```powershell
+$env:PYTHONPATH = "common;vanilla;langgraph_pipeline;crewai_pipeline"
+python -m unittest discover -s tests
 ```
 
 Resultado esperado:
