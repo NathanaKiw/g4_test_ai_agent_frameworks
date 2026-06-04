@@ -52,7 +52,10 @@ g4_test_ai_agent_frameworks/
 │       ├── research_agent.py
 │       └── main.py
 ├── docs/
-│   └── CASO_DE_USO.md
+│   ├── CASO_DE_USO.md
+│   └── COMO_RODAR.md
+├── experiments/
+│   └── benchmark_pipelines.py  # Experimento simulado que gera métricas e gráficos
 ├── requirements.txt
 ├── setup.sh                    # Setup para macOS / Linux
 ├── setup.ps1                   # Setup para Windows
@@ -69,6 +72,7 @@ g4_test_ai_agent_frameworks/
 - [langgraph](https://pypi.org/project/langgraph/) >= 1.0.0
 - [langchain-openai](https://pypi.org/project/langchain-openai/) >= 0.3.0
 - [crewai](https://pypi.org/project/crewai/) >= 1.0.0
+- [Pillow](https://pypi.org/project/Pillow/) >= 10.0.0 *(geração dos gráficos PNG)*
 
 ## Instalação
 
@@ -146,6 +150,40 @@ start_crewai --topic "Impacto da IA na educação brasileira"
 ```bash
 python -m unittest discover -s tests
 ```
+
+## Experimento com gráficos
+
+Além dos comandos reais dos agentes, o projeto inclui um experimento local em
+`experiments/benchmark_pipelines.py` para demonstrar a comparação visual entre
+Vanilla, LangGraph e CrewAI. Esse experimento usa chamadas LLM simuladas, então
+não consome quota de API e permite gerar métricas reproduzíveis para apresentação
+ou relatório.
+
+```bash
+python experiments/benchmark_pipelines.py --runs 10 --delay 0.02 --jitter 0.005
+```
+
+Use `--output-dir caminho/da/pasta` para salvar os artefatos em outro local.
+Por padrão, o benchmark usa perfis simulados por framework e por etapa para que
+os gráficos mostrem diferenças visuais controladas. Use `--uniform-delays` para
+reproduzir o modo neutro, com o mesmo delay em todas as etapas.
+
+O comando gera os artefatos em `artifacts/benchmark/`:
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `benchmark_dashboard.html` | Dashboard visual com cards, tabela resumida e gráficos incorporados |
+| `benchmark_table.md` | Tabela Markdown pronta para anexar ao relatório |
+| `benchmark_results.csv` | Dados por execução e linhas de resumo |
+| `benchmark_report.md` | Resumo textual do benchmark |
+| `benchmark_manifest.json` | Manifesto da execução com parâmetros, frameworks e arquivos gerados |
+| `avg_total_time.png` | Gráfico de barras com tempo médio total por framework |
+| `avg_stage_time.png` | Gráfico agrupado com médias de pesquisa, análise e relatório |
+| `stage_side_by_side.png` | Comparação lado a lado das três etapas por framework |
+
+Os gráficos são renderizados com `Pillow`, sem depender de interface gráfica.
+O dashboard HTML referencia os PNGs gerados na mesma pasta, então pode ser
+aberto diretamente no navegador.
 
 ### Saída esperada
 

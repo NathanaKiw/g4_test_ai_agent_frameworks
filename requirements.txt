@@ -5,3 +5,4 @@ tenacity>=8.2.0
 langgraph>=1.0.0
 langchain-openai>=0.3.0
 crewai[openai]>=1.0.0
+Pillow>=10.0.0

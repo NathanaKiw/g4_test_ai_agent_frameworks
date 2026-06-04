@@ -124,23 +124,80 @@ OK
 
 ## 7. Experimento / demo com gráficos
 
-Para gerar métricas quantitativas e gráficos PNG dos três pipelines, execute:
+O projeto também possui um experimento local para comparar visualmente os três
+pipelines: Vanilla, LangGraph e CrewAI. Esse experimento roda versões simuladas
+das etapas de pesquisa, análise e relatório, então serve para gerar métricas e
+gráficos de demonstração sem fazer chamadas reais à API e sem consumir quota da
+Groq.
+
+Execute o comando abaixo com o ambiente virtual ativado:
+
+macOS / Linux:
+
+```bash
+python experiments/benchmark_pipelines.py --runs 10 --delay 0.02 --jitter 0.005
+```
+
+Windows PowerShell:
 
 ```powershell
 python experiments/benchmark_pipelines.py --runs 10 --delay 0.02 --jitter 0.005
 ```
 
-Artefatos gerados em `artifacts/benchmark/`:
+O que esse comando faz:
 
-- `benchmark_dashboard.html` com o resumo visual pronto para apresentação
-- `benchmark_table.md` com a tabela pronta para colar no relatório
-- `benchmark_results.csv` com os valores por execução
-- `benchmark_report.md` com o resumo consolidado
-- `avg_total_time.png` com o tempo médio total por framework
-- `avg_stage_time.png` com o comparativo visual das três etapas
-- `stage_side_by_side.png` com as três etapas lado a lado por framework
+- executa cada pipeline 10 vezes;
+- simula latências diferentes por framework e por etapa;
+- calcula médias de tempo total e tempo por etapa;
+- gera tabelas, CSV, relatório Markdown, dashboard HTML e gráficos PNG.
 
-Se quiser uma demo mais bonita para mostrar, abra `benchmark_dashboard.html` no navegador. O arquivo já traz cards, tabela resumida e os gráficos incorporados.
+Por padrão, o experimento usa perfis simulados para deixar a comparação mais
+visual: Vanilla recebe menor overhead, LangGraph recebe overhead intermediário e
+CrewAI recebe overhead um pouco maior por representar uma orquestração
+multiagente sequencial. Esses valores são artificiais e servem apenas para
+demonstração dos gráficos, não como medição real de performance da API.
+
+Parâmetros principais:
+
+| Parâmetro | Descrição |
+|-----------|-----------|
+| `--runs 10` | Define quantas execuções serão feitas para cada framework |
+| `--delay 0.02` | Define o tempo simulado de cada chamada LLM, em segundos |
+| `--jitter 0.005` | Adiciona uma pequena variação aleatória ao tempo simulado |
+| `--topic "..."` | Altera o tópico usado como entrada do benchmark |
+| `--seed 42` | Mantém os resultados reproduzíveis entre execuções |
+| `--output-dir artifacts/benchmark` | Define a pasta onde os arquivos serão salvos |
+| `--uniform-delays` | Usa o mesmo delay para todos os frameworks e etapas |
+
+Depois da execução, os arquivos ficam em `artifacts/benchmark/`:
+
+| Arquivo | Finalidade |
+|---------|------------|
+| `benchmark_dashboard.html` | Dashboard pronto para apresentar, com cards, tabela e gráficos |
+| `benchmark_table.md` | Tabela em Markdown para copiar para o relatório do trabalho |
+| `benchmark_results.csv` | Dados completos de cada execução e linhas de resumo |
+| `benchmark_report.md` | Resumo textual consolidado do experimento |
+| `benchmark_manifest.json` | Registro da execução com parâmetros, frameworks e artefatos gerados |
+| `avg_total_time.png` | Gráfico do tempo médio total por framework |
+| `avg_stage_time.png` | Gráfico comparando pesquisa, análise e relatório |
+| `stage_side_by_side.png` | Gráfico das etapas lado a lado por framework |
+
+Para visualizar a demo, abra este arquivo no navegador:
+
+```text
+artifacts/benchmark/benchmark_dashboard.html
+```
+
+Se aparecer o erro abaixo, reinstale as dependências porque o gerador dos
+gráficos usa a biblioteca `Pillow`:
+
+```text
+ModuleNotFoundError: No module named 'PIL'
+```
+
+```bash
+pip install -r requirements.txt
+```
 
 ## 8. Erros comuns
 
