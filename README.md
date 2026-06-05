@@ -145,6 +145,12 @@ start_langgraph --topic "Impacto da IA na educação brasileira"
 start_crewai --topic "Impacto da IA na educação brasileira"
 ```
 
+## Projeto rodando
+
+![Projeto rodando com o benchmark](docs/gif-benchmark.gif)
+
+O GIF acima mostra o projeto em execução com o dashboard do benchmark e os gráficos gerados automaticamente.
+
 ## Testes
 
 ```bash
