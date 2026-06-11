@@ -218,6 +218,11 @@ aberto diretamente no navegador.
 | `GROQ_TEMPERATURE`   | Não         | Temperatura de geração            | `0.0`                    |
 | `GROQ_BASE_URL`      | Não         | Endpoint OpenAI-compatible da Groq | `https://api.groq.com/openai/v1` |
 | `MONGODB_URI`        | Não         | URI de conexão MongoDB            | desativado                  |
+| `LANGGRAPH_GUARDRAILS` | Não       | Liga/desliga os guardrails no LangGraph | `true`             |
+| `LANGGRAPH_CONTEXT_ENGINEERING` | Não | Liga/desliga compactação + notas no LangGraph | `true`    |
+| `LANGGRAPH_CONTEXT_MAX_CHARS` | Não  | Orçamento de caracteres da compactação de histórico | `1500`  |
+| `LANGGRAPH_NOTES_MAX_POINTS` | Não   | Máximo de pontos por nota estruturada | `6`                 |
+| `LANGGRAPH_INPUT_MAX_CHARS` | Não    | Tamanho máximo aceito para o tópico | `2000`                |
 
 ## Métricas de benchmark
 
@@ -257,13 +262,56 @@ A transparência de planejamento é avaliada por etapa (Pesquisa, Análise, Rela
 
 Esses valores serão usados como **linha de base** para comparação com os demais frameworks.
 
+## Guardrails e engenharia de contexto (LangGraph)
+
+O pipeline LangGraph integra, de forma transversal ao fluxo `StateGraph`, dois
+módulos reutilizáveis do pacote `common`:
+
+- **Guardrails** (`common/common/guardrails.py`)
+  - *Entrada*: o nó `input_guard` valida o tópico antes de qualquer chamada de
+    API, bloqueando entradas vazias, longas demais, tentativas de prompt
+    injection/jailbreak e conteúdo proibido (levanta `GuardrailError`).
+  - *Saída*: cada etapa tem o texto higienizado, redigindo segredos (ex.: chaves
+    `gsk_…`, `sk-…`, tokens Bearer) que porventura apareçam.
+- **Engenharia de contexto** (`common/common/context_engineering.py`)
+  - *Compactação de histórico*: condensa o texto repassado entre etapas quando
+    excede o orçamento de caracteres, preservando títulos, listas e frases de
+    alto sinal.
+  - *Notas estruturadas*: memória de trabalho acumulada etapa a etapa, injetada
+    nos prompts seguintes em lugar do texto bruto.
+
+Ambos são **determinísticos** (não fazem chamadas extras ao LLM), de modo que
+`api_calls` permanece igual ao baseline. Cada execução do LangGraph passa a
+expor dois campos adicionais no resultado:
+
+```json
+{
+  "guardrails": {
+    "enabled": true,
+    "input": {"allowed": true, "violations": [], "redactions": 0},
+    "output_redactions": 0,
+    "output_violations": []
+  },
+  "context_engineering": {
+    "enabled": true,
+    "notes": {"entries": [{"stage": "pesquisa", "points": ["..."]}], "total_points": 12},
+    "compaction": {"analysis_input": {"original_chars": 4200, "compacted_chars": 1500, "ratio": 0.357, "compacted": true}},
+    "chars_saved": 2700
+  }
+}
+```
+
+Os recursos podem ser desligados via `LANGGRAPH_GUARDRAILS=false` e
+`LANGGRAPH_CONTEXT_ENGINEERING=false` para comparar o comportamento com e sem
+essas estratégias.
+
 ## Próximas fases
 
 | Framework           | Status        |
 |---------------------|---------------|
 | Vanilla (Groq)      | Concluído         |
 | LangChain           | Planejado         |
-| LangGraph           | Protótipo mínimo  |
+| LangGraph           | Protótipo + guardrails e engenharia de contexto |
 | CrewAI              | Protótipo mínimo  |
 | OpenAI Agents SDK   | Planejado         |
 
