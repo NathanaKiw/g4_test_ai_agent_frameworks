@@ -27,8 +27,32 @@ Implementação: `vanilla/test_vanilla/research_agent.py`
 
 | Framework | Implementação | Foco |
 |-----------|---------------|------|
-| LangGraph | `langgraph_pipeline/test_langgraph/research_agent.py` | Controle explícito do fluxo com `StateGraph` |
+| LangGraph | `langgraph_pipeline/test_langgraph/research_agent.py` | Controle explícito do fluxo com `StateGraph` + guardrails e engenharia de contexto |
 | CrewAI | `crewai_pipeline/test_crewai/research_agent.py` | Colaboração sequencial entre agentes especializados |
+
+## Guardrails e engenharia de contexto (LangGraph)
+
+O pipeline LangGraph integra, de forma transversal, módulos reutilizáveis do
+pacote `common`:
+
+- **Guardrails** (`common/common/guardrails.py`)
+  - *Entrada* (nó `input_guard`): rejeita tópicos vazios, longos demais,
+    tentativas de prompt injection/jailbreak e conteúdo proibido **antes** de
+    gastar chamadas de API. Em caso de bloqueio, levanta `GuardrailError`.
+  - *Saída*: higieniza o texto de **cada etapa**, redigindo segredos (chaves de
+    API, tokens) que porventura vazem.
+- **Engenharia de contexto** (`common/common/context_engineering.py`)
+  - *Compactação de histórico*: quando o texto de uma etapa excede um orçamento
+    de caracteres, é condensado mantendo títulos, listas e frases de alto sinal
+    antes de ser repassado adiante.
+  - *Notas estruturadas*: memória de trabalho acumulada etapa a etapa e injetada
+    nos prompts seguintes em lugar do texto bruto.
+
+Ambos são **determinísticos** (sem chamadas extras ao LLM), preservando o
+contrato `api_calls == 3` do benchmark. Os recursos podem ser desligados por
+variáveis de ambiente (`LANGGRAPH_GUARDRAILS`, `LANGGRAPH_CONTEXT_ENGINEERING`).
+O resultado passa a expor os campos `guardrails` e `context_engineering` com as
+métricas correspondentes.
 
 Comandos:
 

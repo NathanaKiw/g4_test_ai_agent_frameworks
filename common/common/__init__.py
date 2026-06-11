@@ -9,6 +9,19 @@ from .benchmark_metrics import (
     summarize_transparency,
 )
 from .config import BaseConfig
+from .context_engineering import (
+    CompactionResult,
+    StructuredNotes,
+    compact_history,
+    extract_structured_notes,
+    render_notes,
+)
+from .guardrails import (
+    GuardrailError,
+    GuardrailResult,
+    check_input,
+    sanitize_output,
+)
 from .logging_config import LoggingConfig, get_logger, setup_logging
 from .mongodb.research_data import ResearchDataService
 from .research_prompts import (
@@ -27,6 +40,15 @@ from .research_prompts import (
 __version__ = "0.2.0"
 __all__ = [
     "BaseConfig",
+    "CompactionResult",
+    "StructuredNotes",
+    "compact_history",
+    "extract_structured_notes",
+    "render_notes",
+    "GuardrailError",
+    "GuardrailResult",
+    "check_input",
+    "sanitize_output",
     "TokenUsage",
     "aggregate_token_usages",
     "assess_transparency",
