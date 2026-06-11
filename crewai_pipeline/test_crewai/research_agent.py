@@ -1,7 +1,12 @@
 """Agente de Pesquisa e Relatório usando CrewAI.
 
-Implementa o mesmo caso de uso com três agentes especializados e três tarefas
-executadas em processo sequencial.
+Implementa o mesmo caso de uso com três agentes especializados e três tarefas.
+
+Por padrão usa ``Process.sequential`` (esteira fixa, usada no benchmark). Com
+``hierarchical=True`` ativa o modo de **delegação autônoma**: um agente gerente
+(`manager_llm`) coordena os agentes especializados, que recebem
+``allow_delegation=True`` e podem delegar trabalho entre si. O modo hierárquico
+é opcional e não altera o caminho de benchmark.
 """
 
 import time
@@ -67,7 +72,11 @@ class CrewAIResearchReportAgent:
 
     FRAMEWORK = "CrewAI"
 
-    def __init__(self) -> None:
+    # Padrão de classe — herdado por stubs que ignoram ``__init__``,
+    # mantendo o caminho de benchmark em modo sequencial.
+    hierarchical: bool = False
+
+    def __init__(self, *, hierarchical: bool = False) -> None:
         try:
             from crewai import Agent, Crew, LLM, Process, Task
         except ImportError as exc:
@@ -87,8 +96,17 @@ class CrewAIResearchReportAgent:
         self.research_service = ResearchDataService()
         self._stage_llms: Dict[str, Any] = {}
         self._last_api_calls = 0
+        self.hierarchical = hierarchical
 
-    def _build_agents(self):
+    def _make_llm(self):
+        return self.LLM(
+            model=self.config.groq_model,
+            temperature=self.config.groq_temperature,
+            api_key=self.config.groq_api_key,
+            base_url=self.config.groq_base_url,
+        )
+
+    def _build_agents(self, allow_delegation: bool = False):
         research_llm = self.LLM(
             model=self.config.groq_model,
             temperature=self.config.groq_temperature,
@@ -118,7 +136,7 @@ class CrewAIResearchReportAgent:
             backstory=researcher_system(),
             llm=research_llm,
             verbose=False,
-            allow_delegation=False,
+            allow_delegation=allow_delegation,
         )
         analyst = self.Agent(
             role="Analista",
@@ -126,7 +144,7 @@ class CrewAIResearchReportAgent:
             backstory=analyst_system(),
             llm=analysis_llm,
             verbose=False,
-            allow_delegation=False,
+            allow_delegation=allow_delegation,
         )
         writer = self.Agent(
             role="Redator Executivo",
@@ -134,7 +152,7 @@ class CrewAIResearchReportAgent:
             backstory=report_writer_system(),
             llm=report_llm,
             verbose=False,
-            allow_delegation=False,
+            allow_delegation=allow_delegation,
         )
         return researcher, analyst, writer
 
@@ -158,7 +176,9 @@ class CrewAIResearchReportAgent:
         return callback
 
     def _build_tasks(self, topic: str, stage_timings: Dict[str, float]):
-        researcher, analyst, writer = self._build_agents()
+        researcher, analyst, writer = self._build_agents(
+            allow_delegation=getattr(self, "hierarchical", False)
+        )
         task_callback = self._task_callback_factory(stage_timings)
         self._stage_inputs = {
             "research": (researcher_system(), researcher_user(topic)),
@@ -234,12 +254,25 @@ class CrewAIResearchReportAgent:
 
         stage_timings: Dict[str, float] = {}
         tasks, agents = self._build_tasks(topic, stage_timings)
-        crew = self.Crew(
-            agents=agents,
-            tasks=tasks,
-            process=self.Process.sequential,
-            verbose=False,
-        )
+        if getattr(self, "hierarchical", False):
+            manager_llm = self._make_llm()
+            crew = self.Crew(
+                agents=agents,
+                tasks=tasks,
+                process=self.Process.hierarchical,
+                manager_llm=manager_llm,
+                verbose=False,
+            )
+            self.logger.info(
+                "CrewAI em modo hierárquico (delegação autônoma via manager_llm)"
+            )
+        else:
+            crew = self.Crew(
+                agents=agents,
+                tasks=tasks,
+                process=self.Process.sequential,
+                verbose=False,
+            )
 
         t0 = time.perf_counter()
         with _suppress_crewai_logging():
@@ -289,6 +322,11 @@ class CrewAIResearchReportAgent:
         result["token_usage"] = aggregate_token_usages(
             [research_usage, analysis_usage, report_usage]
         ).to_dict()
+        result["delegation"] = {
+            "enabled": getattr(self, "hierarchical", False),
+            "process": "hierarchical" if getattr(self, "hierarchical", False) else "sequential",
+            "allow_delegation": getattr(self, "hierarchical", False),
+        }
 
         self.research_service.insert_research_report(result)
         self.logger.info(
