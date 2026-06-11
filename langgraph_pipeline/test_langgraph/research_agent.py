@@ -8,14 +8,17 @@ import time
 from datetime import datetime
 from typing import Any, Dict, TypedDict
 
-from common import (
+from common.common import (
+    aggregate_token_usages,
     ResearchDataService,
     analyst_messages,
     build_result,
+    estimate_token_usage,
+    extract_token_usage,
     report_writer_messages,
     researcher_messages,
 )
-from common.logging_config import get_logger
+from common.common import get_logger
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
@@ -29,6 +32,7 @@ class ResearchState(TypedDict, total=False):
     analysis: str
     report: str
     stage_timings: Dict[str, float]
+    stage_token_usage: Dict[str, Dict[str, Any]]
 
 
 class LangGraphResearchReportAgent:
@@ -49,7 +53,7 @@ class LangGraphResearchReportAgent:
         self._last_api_calls = 0
         self.graph = self._build_graph()
 
-    def _chat(self, system_content: str, user_content: str) -> str:
+    def _chat(self, system_content: str, user_content: str):
         self._last_api_calls += 1
         response = self.llm.invoke(
             [
@@ -58,7 +62,14 @@ class LangGraphResearchReportAgent:
             ]
         )
         content = response.content
-        return content if isinstance(content, str) else str(content)
+        text = content if isinstance(content, str) else str(content)
+        usage = extract_token_usage(response)
+        if not usage.total_tokens:
+            usage = estimate_token_usage(
+                prompt_text=f"{system_content}\n{user_content}",
+                completion_text=text,
+            )
+        return text, usage
 
     def _build_graph(self):
         graph = StateGraph(ResearchState)
@@ -81,28 +92,40 @@ class LangGraphResearchReportAgent:
     def _research_node(self, state: ResearchState) -> ResearchState:
         system_msg, user_msg = researcher_messages(state["topic"])
         t0 = time.perf_counter()
-        research = self._chat(system_msg, user_msg)
+        research, usage = self._chat(system_msg, user_msg)
         return {
             "research": research,
             "stage_timings": self._record_timing(state, "research_s", t0),
+            "stage_token_usage": {
+                **state.get("stage_token_usage", {}),
+                "research": usage.to_dict(),
+            },
         }
 
     def _analysis_node(self, state: ResearchState) -> ResearchState:
         system_msg, user_msg = analyst_messages(state["topic"], state["research"])
         t0 = time.perf_counter()
-        analysis = self._chat(system_msg, user_msg)
+        analysis, usage = self._chat(system_msg, user_msg)
         return {
             "analysis": analysis,
             "stage_timings": self._record_timing(state, "analysis_s", t0),
+            "stage_token_usage": {
+                **state.get("stage_token_usage", {}),
+                "analysis": usage.to_dict(),
+            },
         }
 
     def _report_node(self, state: ResearchState) -> ResearchState:
         system_msg, user_msg = report_writer_messages(state["topic"], state["analysis"])
         t0 = time.perf_counter()
-        report = self._chat(system_msg, user_msg)
+        report, usage = self._chat(system_msg, user_msg)
         return {
             "report": report,
             "stage_timings": self._record_timing(state, "report_s", t0),
+            "stage_token_usage": {
+                **state.get("stage_token_usage", {}),
+                "report": usage.to_dict(),
+            },
         }
 
     def run_research_pipeline(self, topic: str) -> Dict[str, Any]:
@@ -113,6 +136,14 @@ class LangGraphResearchReportAgent:
         final_state = self.graph.invoke({"topic": topic, "stage_timings": {}})
         stage_timings = dict(final_state.get("stage_timings", {}))
         stage_timings["total_s"] = round(sum(stage_timings.values()), 2)
+        stage_token_usage = dict(final_state.get("stage_token_usage", {}))
+        token_usage = aggregate_token_usages(
+            [
+                extract_token_usage(stage_token_usage.get("research")),
+                extract_token_usage(stage_token_usage.get("analysis")),
+                extract_token_usage(stage_token_usage.get("report")),
+            ]
+        )
 
         result = build_result(
             topic=topic,
@@ -124,6 +155,8 @@ class LangGraphResearchReportAgent:
         result["framework"] = self.FRAMEWORK
         result["api_calls"] = self._last_api_calls
         result["stage_timings"] = stage_timings
+        result["token_usage"] = token_usage.to_dict()
+        result["stage_token_usage"] = stage_token_usage
 
         self.research_service.insert_research_report(result)
         self.logger.info(

@@ -1,7 +1,7 @@
 """Agente de Pesquisa e Relatório — baseline vanilla (API OpenAI direta).
 
 Sem frameworks: controle explícito do fluxo via três chamadas sequenciais
-a chat.completions, servindo como linha de base do experimento.
++a chat.completions, servindo como linha de base do experimento.
 """
 
 import logging
@@ -18,18 +18,22 @@ from tenacity import (
     wait_exponential,
 )
 
-from common import (
+from common.common import (
     ResearchDataService,
+    aggregate_token_usages,
     analyst_messages,
     build_result,
+    estimate_token_usage,
+    extract_token_usage,
+    get_logger,
     report_writer_messages,
     researcher_messages,
 )
-from common.logging_config import get_logger
 
 from .config import Config
 
 logger = get_logger("vanilla_research_agent")
+
 
 def _is_retryable_status_error(exc: BaseException) -> bool:
     return isinstance(exc, APIStatusError) and exc.status_code >= 500
@@ -69,7 +73,7 @@ class ResearchReportAgent:
         )
         self._last_api_calls = 0
 
-    def _chat(self, system_content: str, user_content: str) -> str:
+    def _chat(self, system_content: str, user_content: str):
         """Uma chamada direta ao endpoint de chat completions com retry automático.
 
         Realiza até 3 tentativas com espera exponencial em caso de erros
@@ -84,7 +88,7 @@ class ResearchReportAgent:
             before_sleep=before_sleep_log(self.logger, logging.WARNING),
             reraise=True,
         )
-        def _call() -> str:
+        def _call():
             self._last_api_calls += 1
             response = self.client.chat.completions.create(
                 model=self.config.groq_model,
@@ -94,7 +98,14 @@ class ResearchReportAgent:
                     {"role": "user", "content": user_content},
                 ],
             )
-            return response.choices[0].message.content or ""
+            content = response.choices[0].message.content or ""
+            usage = extract_token_usage(response)
+            if not usage.total_tokens:
+                usage = estimate_token_usage(
+                    prompt_text=f"{system_content}\n{user_content}",
+                    completion_text=content,
+                )
+            return content, usage
 
         return _call()
 
@@ -107,19 +118,19 @@ class ResearchReportAgent:
         # Etapa 1 — Pesquisador
         system_msg, user_msg = researcher_messages(topic)
         t0 = time.perf_counter()
-        research = self._chat(system_msg, user_msg)
+        research, research_usage = self._chat(system_msg, user_msg)
         stage_timings["research_s"] = round(time.perf_counter() - t0, 2)
 
         # Etapa 2 — Analista
         system_msg, user_msg = analyst_messages(topic, research)
         t0 = time.perf_counter()
-        analysis = self._chat(system_msg, user_msg)
+        analysis, analysis_usage = self._chat(system_msg, user_msg)
         stage_timings["analysis_s"] = round(time.perf_counter() - t0, 2)
 
         # Etapa 3 — Redator
         system_msg, user_msg = report_writer_messages(topic, analysis)
         t0 = time.perf_counter()
-        report = self._chat(system_msg, user_msg)
+        report, report_usage = self._chat(system_msg, user_msg)
         stage_timings["report_s"] = round(time.perf_counter() - t0, 2)
 
         stage_timings["total_s"] = round(
@@ -127,6 +138,15 @@ class ResearchReportAgent:
             + stage_timings["analysis_s"]
             + stage_timings["report_s"],
             2,
+        )
+
+        stage_token_usage = {
+            "research": research_usage.to_dict(),
+            "analysis": analysis_usage.to_dict(),
+            "report": report_usage.to_dict(),
+        }
+        token_usage = aggregate_token_usages(
+            [research_usage, analysis_usage, report_usage]
         )
 
         result = build_result(
@@ -139,6 +159,8 @@ class ResearchReportAgent:
         result["framework"] = self.FRAMEWORK
         result["api_calls"] = self._last_api_calls
         result["stage_timings"] = stage_timings
+        result["token_usage"] = token_usage.to_dict()
+        result["stage_token_usage"] = stage_token_usage
 
         self.research_service.insert_research_report(result)
         self.logger.info(
