@@ -96,6 +96,26 @@ Protótipo CrewAI:
 start_crewai --topic "Impacto da IA na educação brasileira"
 ```
 
+### Modos avançados (opcionais)
+
+Esses modos são desligados por padrão e **não** afetam o benchmark.
+
+LangGraph com estados duráveis (checkpointing + retomada):
+
+```bash
+# Executa e persiste o estado sob um thread_id
+start_langgraph --topic "Impacto da IA na educação" --durable --thread-id exec-001
+
+# Retoma a mesma thread sem reprocessar etapas já concluídas
+start_langgraph --topic "Impacto da IA na educação" --durable --thread-id exec-001 --resume
+```
+
+CrewAI com delegação autônoma (processo hierárquico):
+
+```bash
+start_crewai --topic "Impacto da IA na educação" --hierarchical
+```
+
 ## 6. Rodar os testes
 
 Os testes não fazem chamadas reais à API.
@@ -118,7 +138,7 @@ python -m unittest discover -s tests
 Resultado esperado:
 
 ```text
-Ran 7 tests
+Ran 25 tests
 OK
 ```
 
@@ -222,7 +242,7 @@ novamente.
 | Comando | Implementação | Descrição |
 |---------|---------------|-----------|
 | `start_vanilla` | `vanilla/test_vanilla/research_agent.py` | Baseline com chamadas diretas à API Groq |
-| `start_langgraph` | `langgraph_pipeline/test_langgraph/research_agent.py` | Fluxo com `StateGraph` e nós explícitos |
-| `start_crewai` | `crewai_pipeline/test_crewai/research_agent.py` | Três agentes especializados em processo sequencial |
+| `start_langgraph` | `langgraph_pipeline/test_langgraph/research_agent.py` | Fluxo com `StateGraph`, guardrails, engenharia de contexto e modo durável (`--durable`) |
+| `start_crewai` | `crewai_pipeline/test_crewai/research_agent.py` | Três agentes especializados (sequencial; `--hierarchical` ativa delegação autônoma) |
 
 Todos reutilizam os prompts compartilhados em `common/common/research_prompts.py`.

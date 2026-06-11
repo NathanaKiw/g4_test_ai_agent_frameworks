@@ -54,6 +54,24 @@ variáveis de ambiente (`LANGGRAPH_GUARDRAILS`, `LANGGRAPH_CONTEXT_ENGINEERING`)
 O resultado passa a expor os campos `guardrails` e `context_engineering` com as
 métricas correspondentes.
 
+## Modos avançados opt-in (foco de cada framework)
+
+Capacidades específicas de cada framework, **desligadas por padrão** para não
+afetar o benchmark e ativadas por flag de CLI:
+
+| Framework | Modo | Flag | Foco |
+|-----------|------|------|------|
+| LangGraph | Estados duráveis | `--durable` (+ `--thread-id`, `--resume`, `--checkpoint-db`) | Checkpointing do estado a cada nó e retomada sem reprocessar etapas |
+| CrewAI | Delegação autônoma | `--hierarchical` | `Process.hierarchical` com `manager_llm` e `allow_delegation=True` |
+
+- **LangGraph durável**: usa `MemorySaver` (ou `SqliteSaver` com `--checkpoint-db`
+  e o pacote `langgraph-checkpoint-sqlite`). Expõe `get_durable_state(thread_id)`,
+  `state_history(thread_id)` e `resume_research_pipeline(thread_id)`; o resultado
+  ganha o campo `durable`.
+- **CrewAI hierárquico**: um agente gerente coordena e delega às etapas
+  especializadas; o resultado ganha o campo `delegation`. Faz mais chamadas de
+  API por causa da coordenação, por isso fica fora do benchmark comparativo.
+
 Comandos:
 
 ```bash

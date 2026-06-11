@@ -7,14 +7,19 @@ Implementa o fluxo canônico (pesquisa → análise → redação) em um
   da saída de cada etapa (redação de segredos).
 - **Engenharia de contexto**: compactação do histórico repassado entre etapas
   e notas estruturadas acumuladas como memória de trabalho.
+- **Estados duráveis** (opt-in via ``durable=True``): checkpointing do estado a
+  cada nó, com ``thread_id`` para consultar o estado persistido e **retomar**
+  uma execução interrompida sem reprocessar etapas concluídas.
 
 Guardrails e engenharia de contexto são determinísticos e não consomem
-chamadas de API adicionais, preservando ``api_calls == 3``.
+chamadas de API adicionais, preservando ``api_calls == 3``. O modo durável é
+opcional e desligado por padrão, mantendo o pipeline de benchmark intacto.
 """
 
 import time
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
+from uuid import uuid4
 
 from common.common import (
     aggregate_token_usages,
@@ -48,7 +53,7 @@ class ResearchState(TypedDict, total=False):
     report: str
     stage_timings: Dict[str, float]
     stage_token_usage: Dict[str, Dict[str, Any]]
-    notes: StructuredNotes
+    notes: Dict[str, Any]
     compaction: Dict[str, Dict[str, Any]]
     guardrails: Dict[str, Any]
 
@@ -67,7 +72,14 @@ class LangGraphResearchReportAgent:
         "input_max_chars": 2000,
     }
 
-    def __init__(self) -> None:
+    # Padrões de classe — herdados por stubs que ignoram ``__init__``,
+    # garantindo que o caminho de benchmark (não durável) permaneça intacto.
+    durable: bool = False
+    _checkpointer: Any = None
+    _checkpointer_name: Optional[str] = None
+    _last_thread_id: Optional[str] = None
+
+    def __init__(self, *, durable: bool = False, checkpoint_db: Optional[str] = None) -> None:
         self.config = Config()
         self.logger = get_logger("langgraph_research_agent")
         self.research_service = ResearchDataService()
@@ -78,7 +90,67 @@ class LangGraphResearchReportAgent:
             base_url=self.config.groq_base_url,
         )
         self._last_api_calls = 0
+        self.durable = durable
+        self._checkpoint_db = checkpoint_db
+        self._checkpointer = self._make_checkpointer() if durable else None
+        self._checkpointer_name = (
+            type(self._checkpointer).__name__ if self._checkpointer else None
+        )
+        self._last_thread_id = None
         self.graph = self._build_graph()
+
+    # ------------------------------------------------------------------
+    # Estados duráveis (checkpointing) — opt-in
+    # ------------------------------------------------------------------
+    def _make_checkpointer(self):
+        """Cria o checkpointer do LangGraph.
+
+        Prefere o ``SqliteSaver`` (durável entre processos) quando um caminho de
+        banco é fornecido e o pacote está disponível; caso contrário, recorre ao
+        ``MemorySaver`` (durável dentro do processo, suporta retomada).
+        """
+        if getattr(self, "_checkpoint_db", None):
+            try:
+                import sqlite3
+
+                from langgraph.checkpoint.sqlite import SqliteSaver
+
+                conn = sqlite3.connect(self._checkpoint_db, check_same_thread=False)
+                return SqliteSaver(conn)
+            except Exception as exc:  # pragma: no cover - depende de pacote opcional
+                self.logger.warning(
+                    "SqliteSaver indisponível (%s); usando MemorySaver. Para "
+                    "durabilidade entre processos: pip install "
+                    "langgraph-checkpoint-sqlite",
+                    exc,
+                )
+
+        from langgraph.checkpoint.memory import MemorySaver
+
+        return MemorySaver()
+
+    @staticmethod
+    def _thread_config(thread_id: str) -> Dict[str, Any]:
+        return {"configurable": {"thread_id": thread_id}}
+
+    def _count_checkpoints(self, thread_id: str) -> int:
+        try:
+            return sum(1 for _ in self.graph.get_state_history(self._thread_config(thread_id)))
+        except Exception:  # pragma: no cover - defensivo
+            return 0
+
+    def get_durable_state(self, thread_id: str) -> Dict[str, Any]:
+        """Lê o estado persistido de uma ``thread`` (prova de durabilidade)."""
+        if not getattr(self, "durable", False):
+            raise RuntimeError("Modo durável desativado: instancie com durable=True.")
+        snapshot = self.graph.get_state(self._thread_config(thread_id))
+        return dict(snapshot.values) if snapshot and snapshot.values else {}
+
+    def state_history(self, thread_id: str) -> List[Dict[str, Any]]:
+        """Histórico de checkpoints da ``thread`` (mais recente primeiro)."""
+        if not getattr(self, "durable", False):
+            raise RuntimeError("Modo durável desativado: instancie com durable=True.")
+        return [snap.values for snap in self.graph.get_state_history(self._thread_config(thread_id))]
 
     # ------------------------------------------------------------------
     # Configuração tolerante (funciona mesmo sem ``self.config``)
@@ -117,6 +189,9 @@ class LangGraphResearchReportAgent:
         graph.add_edge("research", "analysis")
         graph.add_edge("analysis", "report")
         graph.add_edge("report", END)
+        checkpointer = getattr(self, "_checkpointer", None)
+        if checkpointer is not None:
+            return graph.compile(checkpointer=checkpointer)
         return graph.compile()
 
     def _record_timing(
@@ -176,15 +251,19 @@ class LangGraphResearchReportAgent:
     # ------------------------------------------------------------------
     def _record_notes(
         self, state: ResearchState, stage: str, text: str
-    ) -> StructuredNotes:
-        """Acrescenta as notas estruturadas extraídas de uma etapa."""
-        notes = state.get("notes") or StructuredNotes()
+    ) -> Dict[str, Any]:
+        """Acrescenta as notas estruturadas extraídas de uma etapa.
+
+        Retorna um dicionário simples (serializável por checkpointers duráveis),
+        evitando persistir o dataclass diretamente no estado.
+        """
+        notes = StructuredNotes.from_dict(state.get("notes"))
         if self._setting("context_engineering_enabled"):
             points = extract_structured_notes(
                 stage, text, max_points=self._setting("notes_max_points")
             )
             notes.add(stage, points)
-        return notes
+        return notes.to_dict()
 
     def _prepare_context(
         self, state: ResearchState, raw_text: str, slot: str
@@ -203,7 +282,7 @@ class LangGraphResearchReportAgent:
         )
         compaction[slot] = result.to_dict()
 
-        notes_block = render_notes(state.get("notes") or StructuredNotes())
+        notes_block = render_notes(StructuredNotes.from_dict(state.get("notes")))
         augmented = (
             f"{notes_block}\n\n{result.text}" if notes_block else result.text
         )
@@ -274,7 +353,7 @@ class LangGraphResearchReportAgent:
     def _build_context_summary(self, final_state: ResearchState) -> Dict[str, Any]:
         """Consolida as métricas de engenharia de contexto para o resultado."""
         compaction = dict(final_state.get("compaction", {}))
-        notes = final_state.get("notes") or StructuredNotes()
+        notes = StructuredNotes.from_dict(final_state.get("notes"))
         chars_saved = sum(
             max(0, entry.get("original_chars", 0) - entry.get("compacted_chars", 0))
             for entry in compaction.values()
@@ -286,12 +365,8 @@ class LangGraphResearchReportAgent:
             "chars_saved": chars_saved,
         }
 
-    def run_research_pipeline(self, topic: str) -> Dict[str, Any]:
-        """Executa o grafo completo para um tópico."""
-        self._last_api_calls = 0
-        self.logger.info("Iniciando pipeline LangGraph para: %s", topic)
-
-        final_state = self.graph.invoke({"topic": topic, "stage_timings": {}})
+    def _assemble_result(self, topic: str, final_state: ResearchState) -> Dict[str, Any]:
+        """Monta o dicionário de resultado padronizado a partir do estado final."""
         stage_timings = dict(final_state.get("stage_timings", {}))
         stage_timings["total_s"] = round(sum(stage_timings.values()), 2)
         stage_token_usage = dict(final_state.get("stage_token_usage", {}))
@@ -305,9 +380,9 @@ class LangGraphResearchReportAgent:
 
         result = build_result(
             topic=topic,
-            research=final_state["research"],
-            analysis=final_state["analysis"],
-            report=final_state["report"],
+            research=final_state.get("research", ""),
+            analysis=final_state.get("analysis", ""),
+            report=final_state.get("report", ""),
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
         result["framework"] = self.FRAMEWORK
@@ -318,13 +393,64 @@ class LangGraphResearchReportAgent:
         result["guardrails"] = final_state.get("guardrails", {})
         result["context_engineering"] = self._build_context_summary(final_state)
 
+        if getattr(self, "durable", False):
+            thread_id = getattr(self, "_last_thread_id", None)
+            result["durable"] = {
+                "enabled": True,
+                "thread_id": thread_id,
+                "checkpointer": getattr(self, "_checkpointer_name", None),
+                "checkpoints": self._count_checkpoints(thread_id) if thread_id else 0,
+            }
+        return result
+
+    def run_research_pipeline(
+        self, topic: str, *, thread_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Executa o grafo completo para um tópico.
+
+        No modo durável, o estado é persistido a cada nó sob ``thread_id``
+        (gerado automaticamente se não informado), permitindo consulta e
+        retomada posterior via :meth:`resume_research_pipeline`.
+        """
+        self._last_api_calls = 0
+        self.logger.info("Iniciando pipeline LangGraph para: %s", topic)
+
+        initial: ResearchState = {"topic": topic, "stage_timings": {}}
+        if getattr(self, "durable", False):
+            thread_id = thread_id or uuid4().hex
+            self._last_thread_id = thread_id
+            final_state = self.graph.invoke(initial, self._thread_config(thread_id))
+        else:
+            final_state = self.graph.invoke(initial)
+
+        result = self._assemble_result(topic, final_state)
         self.research_service.insert_research_report(result)
         self.logger.info(
             "Pipeline LangGraph concluído (%d chamadas API, total=%.2fs, "
             "%d caracteres economizados por compactação)",
             self._last_api_calls,
-            stage_timings["total_s"],
+            result["stage_timings"]["total_s"],
             result["context_engineering"]["chars_saved"],
+        )
+        return result
+
+    def resume_research_pipeline(self, thread_id: str) -> Dict[str, Any]:
+        """Retoma uma execução durável interrompida a partir do último checkpoint.
+
+        Etapas já concluídas não são reprocessadas — seus resultados vêm do
+        estado persistido —, demonstrando a durabilidade do estado.
+        """
+        if not getattr(self, "durable", False):
+            raise RuntimeError("Modo durável desativado: instancie com durable=True.")
+
+        self._last_thread_id = thread_id
+        self.logger.info("Retomando pipeline LangGraph (thread=%s)", thread_id)
+        final_state = self.graph.invoke(None, self._thread_config(thread_id))
+        topic = final_state.get("topic", "")
+        result = self._assemble_result(topic, final_state)
+        self.research_service.insert_research_report(result)
+        self.logger.info(
+            "Pipeline LangGraph retomado e concluído (thread=%s)", thread_id
         )
         return result
 

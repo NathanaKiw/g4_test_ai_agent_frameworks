@@ -92,6 +92,20 @@ class StructuredNotes:
     def to_dict(self) -> dict:
         return {"entries": list(self.entries), "total_points": self.total_points}
 
+    @classmethod
+    def from_dict(cls, data) -> "StructuredNotes":
+        """Reconstrói as notas a partir de um dict serializável (ou instância).
+
+        Útil para normalizar o estado vindo de um checkpointer durável, onde as
+        notas são persistidas como dados simples (sem o dataclass).
+        """
+        if isinstance(data, cls):
+            return data
+        notes = cls()
+        if isinstance(data, dict):
+            notes.entries = list(data.get("entries", []))
+        return notes
+
 
 def _split_sentences(text: str) -> List[str]:
     parts = re.split(r"(?<=[.!?])\s+", text.strip())

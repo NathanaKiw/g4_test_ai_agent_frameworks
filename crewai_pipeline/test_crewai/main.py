@@ -13,14 +13,20 @@ from .research_agent import CrewAIResearchReportAgent  # noqa: E402
 def main() -> None:
     parser = argparse.ArgumentParser(description="Agente de Pesquisa — CrewAI")
     parser.add_argument("--topic", required=True, help="Tópico de pesquisa")
+    parser.add_argument(
+        "--hierarchical",
+        action="store_true",
+        help="Ativa o modo hierárquico com delegação autônoma (agente gerente)",
+    )
     args = parser.parse_args()
 
     agent = None
     try:
-        agent = CrewAIResearchReportAgent()
+        agent = CrewAIResearchReportAgent(hierarchical=args.hierarchical)
         result = agent.run_research_pipeline(args.topic)
 
-        print("\n=== RELATÓRIO FINAL (CrewAI) ===\n")
+        modo = "hierárquico/delegação" if args.hierarchical else "sequencial"
+        print(f"\n=== RELATÓRIO FINAL (CrewAI — {modo}) ===\n")
         print(result["report"])
 
         timings = result.get("stage_timings", {})
@@ -32,6 +38,13 @@ def main() -> None:
                 f"análise={timings.get('analysis_s', 0):.2f}, "
                 f"relatório={timings.get('report_s', 0):.2f}, "
                 f"total={timings.get('total_s', 0):.2f}]"
+            )
+
+        delegation = result.get("delegation", {})
+        if delegation:
+            print(
+                f"[Orquestração: processo={delegation.get('process', 'sequential')}, "
+                f"delegação autônoma={'sim' if delegation.get('enabled') else 'não'}]"
             )
     except ValueError as exc:
         print(f"\n[ERRO de configuração] {exc}", file=sys.stderr)

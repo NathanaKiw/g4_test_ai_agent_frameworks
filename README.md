@@ -305,14 +305,62 @@ Os recursos podem ser desligados via `LANGGRAPH_GUARDRAILS=false` e
 `LANGGRAPH_CONTEXT_ENGINEERING=false` para comparar o comportamento com e sem
 essas estratégias.
 
+## Modos avançados opt-in (não afetam o benchmark)
+
+Além do pipeline canônico, LangGraph e CrewAI expõem capacidades que são o
+**foco** de cada framework. São desligadas por padrão — o benchmark continua
+executando o fluxo sequencial idêntico — e ativadas por flag de CLI.
+
+### LangGraph — estados duráveis (checkpointing + retomada)
+
+Com `--durable`, o estado é persistido a cada nó por um *checkpointer*
+(`MemorySaver` por padrão; `SqliteSaver` se houver `--checkpoint-db` e o pacote
+`langgraph-checkpoint-sqlite` instalado). Cada execução recebe um `thread_id`,
+o que permite **consultar o estado persistido** e **retomar** uma execução
+interrompida sem reprocessar etapas já concluídas.
+
+```bash
+# Execução durável (gera/usa um thread_id)
+start_langgraph --topic "Impacto da IA na educação" --durable --thread-id exec-001
+
+# Retomar a mesma thread após uma interrupção (não refaz etapas concluídas)
+start_langgraph --topic "Impacto da IA na educação" --durable --thread-id exec-001 --resume
+
+# Durabilidade entre processos (requer: pip install langgraph-checkpoint-sqlite)
+start_langgraph --topic "..." --durable --thread-id exec-001 --checkpoint-db .lg_state.sqlite
+```
+
+No modo durável o resultado ganha o campo `durable` (`thread_id`, `checkpointer`,
+número de `checkpoints`). Métodos auxiliares: `get_durable_state(thread_id)` e
+`state_history(thread_id)`.
+
+### CrewAI — delegação autônoma (processo hierárquico)
+
+Com `--hierarchical`, o crew passa a usar `Process.hierarchical` com um agente
+gerente (`manager_llm`) e agentes especializados com `allow_delegation=True` — o
+gerente coordena e delega o trabalho de forma autônoma, em vez da esteira fixa.
+
+```bash
+# Esteira sequencial (padrão, usada no benchmark)
+start_crewai --topic "Impacto da IA na educação"
+
+# Delegação autônoma (gerente coordena os especialistas)
+start_crewai --topic "Impacto da IA na educação" --hierarchical
+```
+
+No modo hierárquico o resultado ganha o campo `delegation`
+(`process`, `allow_delegation`). Observação: o modo hierárquico naturalmente faz
+**mais chamadas de API** (coordenação do gerente), por isso é mantido fora do
+benchmark comparativo.
+
 ## Próximas fases
 
 | Framework           | Status        |
 |---------------------|---------------|
 | Vanilla (Groq)      | Concluído         |
 | LangChain           | Planejado         |
-| LangGraph           | Protótipo + guardrails e engenharia de contexto |
-| CrewAI              | Protótipo mínimo  |
+| LangGraph           | Protótipo + guardrails, engenharia de contexto e estados duráveis |
+| CrewAI              | Protótipo + modo hierárquico (delegação autônoma) |
 | OpenAI Agents SDK   | Planejado         |
 
 ## Licença
