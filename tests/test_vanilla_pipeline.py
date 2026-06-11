@@ -8,6 +8,7 @@ vs non-retryable API errors.
 import unittest
 from unittest.mock import patch
 
+from common.common import TokenUsage
 from common.mongodb.research_data import ResearchDataService
 from test_vanilla.research_agent import (
     ResearchReportAgent,
@@ -39,7 +40,18 @@ class StubResearchReportAgent(ResearchReportAgent):
 
     def _chat(self, system_content, user_content):
         self._last_api_calls += 1
-        return f"stub response {self._last_api_calls}"
+        text = (
+            f"stub response {self._last_api_calls}\n"
+            "## Plano\n- passos\n- metodologia\n"
+            "Limitações: lacunas conhecidas.\nPróximos passos: recomendações."
+        )
+        usage = TokenUsage(
+            prompt_tokens=7,
+            completion_tokens=11,
+            total_tokens=18,
+            source="actual",
+        )
+        return text, usage
 
 
 class VanillaPipelineTest(unittest.TestCase):
@@ -66,7 +78,14 @@ class VanillaPipelineTest(unittest.TestCase):
                 "framework",
                 "api_calls",
                 "stage_timings",
+                "token_usage",
+                "stage_token_usage",
             },
+        )
+        self.assertEqual(result["token_usage"]["total_tokens"], 54)
+        self.assertEqual(
+            set(result["stage_token_usage"]),
+            {"research", "analysis", "report"},
         )
 
 

@@ -10,17 +10,20 @@ from contextlib import contextmanager
 from typing import Any, Dict
 import logging
 
-from common import (
+from common.common import (
+    aggregate_token_usages,
     ResearchDataService,
     analyst_system,
     analyst_user,
     build_result,
+    estimate_token_usage,
+    extract_token_usage,
     report_writer_system,
     report_writer_user,
     researcher_system,
     researcher_user,
 )
-from common.logging_config import get_logger
+from common.common import get_logger
 
 from .config import Config
 
@@ -82,20 +85,38 @@ class CrewAIResearchReportAgent:
         self.config = Config()
         self.logger = get_logger("crewai_research_agent")
         self.research_service = ResearchDataService()
-        self.llm = LLM(
+        self._stage_llms: Dict[str, Any] = {}
+        self._last_api_calls = 0
+
+    def _build_agents(self):
+        research_llm = self.LLM(
             model=self.config.groq_model,
             temperature=self.config.groq_temperature,
             api_key=self.config.groq_api_key,
             base_url=self.config.groq_base_url,
         )
-        self._last_api_calls = 0
-
-    def _build_agents(self):
+        analysis_llm = self.LLM(
+            model=self.config.groq_model,
+            temperature=self.config.groq_temperature,
+            api_key=self.config.groq_api_key,
+            base_url=self.config.groq_base_url,
+        )
+        report_llm = self.LLM(
+            model=self.config.groq_model,
+            temperature=self.config.groq_temperature,
+            api_key=self.config.groq_api_key,
+            base_url=self.config.groq_base_url,
+        )
+        self._stage_llms = {
+            "research": research_llm,
+            "analysis": analysis_llm,
+            "report": report_llm,
+        }
         researcher = self.Agent(
             role="Pesquisador",
             goal="Coletar contexto, fatos, tendências e oportunidades sobre o tópico.",
             backstory=researcher_system(),
-            llm=self.llm,
+            llm=research_llm,
             verbose=False,
             allow_delegation=False,
         )
@@ -103,7 +124,7 @@ class CrewAIResearchReportAgent:
             role="Analista",
             goal="Interpretar a pesquisa e produzir insights acionáveis.",
             backstory=analyst_system(),
-            llm=self.llm,
+            llm=analysis_llm,
             verbose=False,
             allow_delegation=False,
         )
@@ -111,7 +132,7 @@ class CrewAIResearchReportAgent:
             role="Redator Executivo",
             goal="Transformar a análise em um relatório executivo profissional.",
             backstory=report_writer_system(),
-            llm=self.llm,
+            llm=report_llm,
             verbose=False,
             allow_delegation=False,
         )
@@ -139,6 +160,17 @@ class CrewAIResearchReportAgent:
     def _build_tasks(self, topic: str, stage_timings: Dict[str, float]):
         researcher, analyst, writer = self._build_agents()
         task_callback = self._task_callback_factory(stage_timings)
+        self._stage_inputs = {
+            "research": (researcher_system(), researcher_user(topic)),
+            "analysis": (
+                analyst_system(),
+                analyst_user(topic, "Use como base o resultado da tarefa de pesquisa anterior."),
+            ),
+            "report": (
+                report_writer_system(),
+                report_writer_user(topic, "Use como base o resultado da tarefa de análise anterior."),
+            ),
+        }
 
         research_task = self.Task(
             description=researcher_user(topic),
@@ -187,6 +219,14 @@ class CrewAIResearchReportAgent:
         raw = getattr(output, "raw", None)
         return raw if raw is not None else str(output or "")
 
+    def _usage_for_stage(self, stage: str, output_text: str):
+        llm = self._stage_llms.get(stage)
+        usage = extract_token_usage(llm.get_token_usage_summary()) if llm is not None else None
+        if not usage or not (usage.total_tokens or usage.prompt_tokens or usage.completion_tokens):
+            prompt_text = "\n\n".join(self._stage_inputs.get(stage, ("", "")))
+            usage = estimate_token_usage(prompt_text=prompt_text, completion_text=output_text)
+        return usage
+
     def run_research_pipeline(self, topic: str) -> Dict[str, Any]:
         """Executa o crew sequencial para um tópico."""
         self._last_api_calls = 0
@@ -223,16 +263,32 @@ class CrewAIResearchReportAgent:
         else:
             stage_timings["total_s"] = round(time.perf_counter() - t0, 2)
 
+        research_output = self._raw_output(tasks[0])
+        analysis_output = self._raw_output(tasks[1])
+        report_output = self._raw_output(tasks[2])
+
+        research_usage = self._usage_for_stage("research", research_output)
+        analysis_usage = self._usage_for_stage("analysis", analysis_output)
+        report_usage = self._usage_for_stage("report", report_output)
+
         result = build_result(
             topic=topic,
-            research=self._raw_output(tasks[0]),
-            analysis=self._raw_output(tasks[1]),
-            report=self._raw_output(tasks[2]),
+            research=research_output,
+            analysis=analysis_output,
+            report=report_output,
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
         result["framework"] = self.FRAMEWORK
         result["api_calls"] = self._last_api_calls
         result["stage_timings"] = stage_timings
+        result["stage_token_usage"] = {
+            "research": research_usage.to_dict(),
+            "analysis": analysis_usage.to_dict(),
+            "report": report_usage.to_dict(),
+        }
+        result["token_usage"] = aggregate_token_usages(
+            [research_usage, analysis_usage, report_usage]
+        ).to_dict()
 
         self.research_service.insert_research_report(result)
         self.logger.info(

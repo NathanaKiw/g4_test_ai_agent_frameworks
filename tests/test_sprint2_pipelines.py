@@ -7,6 +7,7 @@ for insufficient quota scenarios.
 
 import unittest
 
+from common.common import TokenUsage
 from test_crewai.research_agent import (
     CrewAIResearchReportAgent,
     _is_insufficient_quota_error,
@@ -42,7 +43,18 @@ class StubLangGraphAgent(LangGraphResearchReportAgent):
     def _chat(self, system_content, user_content):
         # Return predictable stub responses and count API call attempts.
         self._last_api_calls += 1
-        return f"stub response {self._last_api_calls}"
+        text = (
+            f"stub response {self._last_api_calls}\n"
+            "## Plano\n- passos\n- metodologia\n"
+            "Limitações: lacunas conhecidas.\nPróximos passos: recomendações."
+        )
+        usage = TokenUsage(
+            prompt_tokens=5,
+            completion_tokens=9,
+            total_tokens=14,
+            source="actual",
+        )
+        return text, usage
 
 
 class LangGraphPipelineTest(unittest.TestCase):
@@ -70,7 +82,14 @@ class LangGraphPipelineTest(unittest.TestCase):
                 "framework",
                 "api_calls",
                 "stage_timings",
+                "token_usage",
+                "stage_token_usage",
             },
+        )
+        self.assertEqual(result["token_usage"]["total_tokens"], 42)
+        self.assertEqual(
+            set(result["stage_token_usage"]),
+            {"research", "analysis", "report"},
         )
 
 

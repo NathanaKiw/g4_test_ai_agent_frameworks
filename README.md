@@ -8,6 +8,8 @@ Comparar como diferentes frameworks de orquestração de agentes (LangChain, Lan
 
 - `api_calls` — número total de tentativas de chamada à API (inclui retries)
 - `stage_timings` — latência por etapa (`research_s`, `analysis_s`, `report_s`)
+- `token_usage` — consumo de tokens por etapa e total (prompt + completion), capturado da resposta nativa do SDK quando disponível e estimado como fallback
+- `transparency_score` — avaliação qualitativa de transparência no planejamento, baseada em sinais observáveis no texto (estrutura, método, premissas, limitações, próximos passos)
 
 A fase atual entrega o **baseline Vanilla** e dois protótipos mínimos da Sprint 2: **LangGraph** e **CrewAI**.
 
@@ -149,7 +151,7 @@ start_crewai --topic "Impacto da IA na educação brasileira"
 
 ![Projeto rodando com o benchmark](docs/gif-benchmark.gif)
 
-O GIF acima mostra o projeto em execução com o dashboard do benchmark e os gráficos gerados automaticamente.
+O GIF acima mostra o projeto em execução.
 
 ## Testes
 
@@ -184,6 +186,7 @@ O comando gera os artefatos em `artifacts/benchmark/`:
 | `avg_total_time.png` | Gráfico de barras com tempo médio total por framework |
 | `avg_stage_time.png` | Gráfico agrupado com médias de pesquisa, análise e relatório |
 | `stage_side_by_side.png` | Comparação lado a lado das três etapas por framework |
+| `overview_metrics.png` | Painel triplo com velocidade, chamadas de API e tokens médios por framework |
 
 Os gráficos são renderizados com `Pillow`, sem depender de interface gráfica.
 O dashboard HTML referencia os PNGs gerados na mesma pasta, então pode ser
@@ -227,7 +230,19 @@ Cada execução retorna:
   "stage_timings": {
     "research_s": 8.32,
     "analysis_s": 6.51,
-    "report_s": 9.14
+    "report_s": 9.14,
+    "total_s": 23.97
+  },
+  "token_usage": {
+    "prompt_tokens": 1240,
+    "completion_tokens": 980,
+    "total_tokens": 2220,
+    "source": "actual"
+  },
+  "stage_token_usage": {
+    "research": {"prompt_tokens": 420, "completion_tokens": 360, "total_tokens": 780, "source": "actual"},
+    "analysis": {"prompt_tokens": 400, "completion_tokens": 310, "total_tokens": 710, "source": "actual"},
+    "report":   {"prompt_tokens": 420, "completion_tokens": 310, "total_tokens": 730, "source": "actual"}
   },
   "topic": "...",
   "report": "..."
@@ -235,6 +250,10 @@ Cada execução retorna:
 ```
 
 Sem retries, o baseline executa três chamadas lógicas. Se houver rate limit, falha de conexão ou erro 5xx transitório, `api_calls` pode ser maior porque contabiliza as tentativas reais enviadas à API.
+
+O campo `source` em `token_usage` indica a origem dos tokens: `actual` quando o SDK expõe metadados reais, `estimated` quando o benchmark caiu no fallback baseado em texto, ou `mixed` quando uma execução combina os dois.
+
+A transparência de planejamento é avaliada por etapa (Pesquisa, Análise, Relatório) com base em sinais observáveis no texto final — estrutura, evidências de método, premissas, limitações e próximos passos — produzindo um score de 0 a 5 e um rótulo (`baixa`, `moderada`, `alta`) consolidado por framework no dashboard e no relatório Markdown.
 
 Esses valores serão usados como **linha de base** para comparação com os demais frameworks.
 
