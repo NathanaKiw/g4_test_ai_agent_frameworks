@@ -27,13 +27,15 @@ Implementação: `vanilla/test_vanilla/research_agent.py`
 
 | Framework | Implementação | Foco |
 |-----------|---------------|------|
+| LangChain | `langchain_pipeline/test_langchain/research_agent.py` | Encadeamento de componentes com LCEL (`prompt \| llm \| parser`) + guardrails e engenharia de contexto (Sprint 3) |
 | LangGraph | `langgraph_pipeline/test_langgraph/research_agent.py` | Controle explícito do fluxo com `StateGraph` + guardrails e engenharia de contexto |
 | CrewAI | `crewai_pipeline/test_crewai/research_agent.py` | Colaboração sequencial entre agentes especializados |
 
-## Guardrails e engenharia de contexto (LangGraph)
+## Guardrails e engenharia de contexto (LangChain e LangGraph)
 
-O pipeline LangGraph integra, de forma transversal, módulos reutilizáveis do
-pacote `common`:
+Foco da **Sprint 3** (entregue no pipeline **LangChain**) e também integrado ao
+**LangGraph**. Ambos consomem, de forma transversal, os mesmos módulos
+reutilizáveis do pacote `common`:
 
 - **Guardrails** (`common/common/guardrails.py`)
   - *Entrada* (nó `input_guard`): rejeita tópicos vazios, longos demais,
@@ -76,6 +78,7 @@ Comandos:
 
 ```bash
 start_vanilla --topic "Impacto da IA na educação brasileira"
+start_langchain --topic "Impacto da IA na educação brasileira"
 start_langgraph --topic "Impacto da IA na educação brasileira"
 start_crewai --topic "Impacto da IA na educação brasileira"
 ```

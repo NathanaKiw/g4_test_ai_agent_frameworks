@@ -11,7 +11,7 @@ Comparar como diferentes frameworks de orquestração de agentes (LangChain, Lan
 - `token_usage` — consumo de tokens por etapa e total (prompt + completion), capturado da resposta nativa do SDK quando disponível e estimado como fallback
 - `transparency_score` — avaliação qualitativa de transparência no planejamento, baseada em sinais observáveis no texto (estrutura, método, premissas, limitações, próximos passos)
 
-A fase atual entrega o **baseline Vanilla** e dois protótipos mínimos da Sprint 2: **LangGraph** e **CrewAI**.
+A fase atual entrega o **baseline Vanilla**, os protótipos **LangGraph** e **CrewAI** (Sprint 2) e o pipeline **LangChain (LCEL)** com guardrails e engenharia de contexto (Sprint 3).
 
 ## Pipeline canônico
 
@@ -40,6 +40,11 @@ g4_test_ai_agent_frameworks/
 │           └── research_data.py
 ├── vanilla/                    # Baseline — API Groq direta (sem framework)
 │   └── test_vanilla/
+│       ├── config.py
+│       ├── research_agent.py
+│       └── main.py
+├── langchain_pipeline/         # Protótipo Sprint 3 — LangChain (LCEL) + guardrails/contexto
+│   └── test_langchain/
 │       ├── config.py
 │       ├── research_agent.py
 │       └── main.py
@@ -123,7 +128,7 @@ source .venv/bin/activate        # Linux/Mac
 # ou: .\.venv\Scripts\activate   # Windows
 
 pip install -r requirements.txt
-pip install -e ./common -e ./vanilla -e ./langgraph_pipeline -e ./crewai_pipeline
+pip install -e ./common -e ./vanilla -e ./langchain_pipeline -e ./langgraph_pipeline -e ./crewai_pipeline
 cp .env.example .env
 ```
 
@@ -143,6 +148,7 @@ GROQ_BASE_URL=https://api.groq.com/openai/v1
 
 ```bash
 start_vanilla --topic "Impacto da IA na educação brasileira"
+start_langchain --topic "Impacto da IA na educação brasileira"
 start_langgraph --topic "Impacto da IA na educação brasileira"
 start_crewai --topic "Impacto da IA na educação brasileira"
 ```
@@ -163,7 +169,7 @@ python -m unittest discover -s tests
 
 Além dos comandos individuais dos agentes, o projeto inclui um experimento em
 `experiments/benchmark_pipelines.py` para comparar visualmente Vanilla,
-LangGraph e CrewAI. No modo padrão, ele executa os pipelines reais, coleta as
+LangChain, LangGraph e CrewAI. No modo padrão, ele executa os pipelines reais, coleta as
 métricas retornadas por cada implementação e gera tabelas, relatório, dashboard
 HTML e gráficos PNG.
 
@@ -262,10 +268,12 @@ A transparência de planejamento é avaliada por etapa (Pesquisa, Análise, Rela
 
 Esses valores serão usados como **linha de base** para comparação com os demais frameworks.
 
-## Guardrails e engenharia de contexto (LangGraph)
+## Guardrails e engenharia de contexto (LangChain e LangGraph)
 
-O pipeline LangGraph integra, de forma transversal ao fluxo `StateGraph`, dois
-módulos reutilizáveis do pacote `common`:
+Estes recursos são o foco da **Sprint 3** (entregue no pipeline **LangChain**) e
+também estão integrados ao **LangGraph**. Os dois consomem os **mesmos módulos
+reutilizáveis** do pacote `common` (`guardrails.py` e `context_engineering.py`),
+de forma transversal ao fluxo:
 
 - **Guardrails** (`common/common/guardrails.py`)
   - *Entrada*: o nó `input_guard` valida o tópico antes de qualquer chamada de
@@ -358,7 +366,7 @@ benchmark comparativo.
 | Framework           | Status        |
 |---------------------|---------------|
 | Vanilla (Groq)      | Concluído         |
-| LangChain           | Planejado         |
+| LangChain           | Concluído — LCEL + guardrails e engenharia de contexto |
 | LangGraph           | Protótipo + guardrails, engenharia de contexto e estados duráveis |
 | CrewAI              | Protótipo + modo hierárquico (delegação autônoma) |
 | OpenAI Agents SDK   | Planejado         |
