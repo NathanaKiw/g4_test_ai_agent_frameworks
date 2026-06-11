@@ -29,7 +29,7 @@ python -m venv .venv
 
 ```bash
 pip install -r requirements.txt
-pip install -e ./common -e ./vanilla -e ./langgraph_pipeline -e ./crewai_pipeline
+pip install -e ./common -e ./vanilla -e ./langchain_pipeline -e ./langgraph_pipeline -e ./crewai_pipeline
 ```
 
 Também é possível usar o script de setup no macOS/Linux:
@@ -84,6 +84,12 @@ Baseline vanilla:
 start_vanilla --topic "Impacto da IA na educação brasileira"
 ```
 
+Protótipo LangChain (LCEL + guardrails + engenharia de contexto):
+
+```bash
+start_langchain --topic "Impacto da IA na educação brasileira"
+```
+
 Protótipo LangGraph:
 
 ```bash
@@ -125,27 +131,27 @@ Use um destes comandos conforme seu sistema:
 - macOS / Linux:
 
 ```bash
-PYTHONPATH=common:vanilla:langgraph_pipeline:crewai_pipeline python3 -m unittest discover -s tests
+PYTHONPATH=common:vanilla:langchain_pipeline:langgraph_pipeline:crewai_pipeline python3 -m unittest discover -s tests
 ```
 
 - Windows PowerShell (venv ativado):
 
 ```powershell
-$env:PYTHONPATH = "common;vanilla;langgraph_pipeline;crewai_pipeline"
+$env:PYTHONPATH = "common;vanilla;langchain_pipeline;langgraph_pipeline;crewai_pipeline"
 python -m unittest discover -s tests
 ```
 
 Resultado esperado:
 
 ```text
-Ran 25 tests
+Ran 30 tests
 OK
 ```
 
 ## 7. Experimento / benchmark com gráficos
 
-O projeto também possui um experimento para comparar visualmente os três
-pipelines: Vanilla, LangGraph e CrewAI. Por padrão, ele executa as
+O projeto também possui um experimento para comparar visualmente os quatro
+pipelines: Vanilla, LangChain, LangGraph e CrewAI. Por padrão, ele executa as
 implementações reais dos agentes, coleta as métricas retornadas por cada
 pipeline (`api_calls`, `research_s`, `analysis_s`, `report_s` e `total_s`) e
 gera gráficos a partir desses dados.
@@ -169,7 +175,7 @@ python experiments/benchmark_pipelines.py --runs 1 --topic "Impacto da IA na edu
 
 O que esse comando faz:
 
-- executa Vanilla, LangGraph e CrewAI usando a API real;
+- executa Vanilla, LangChain, LangGraph e CrewAI usando a API real;
 - coleta os tempos medidos por cada implementação;
 - calcula médias de tempo total e tempo por etapa;
 - gera tabelas, CSV, relatório Markdown, dashboard HTML e gráficos PNG.
@@ -242,6 +248,7 @@ novamente.
 | Comando | Implementação | Descrição |
 |---------|---------------|-----------|
 | `start_vanilla` | `vanilla/test_vanilla/research_agent.py` | Baseline com chamadas diretas à API Groq |
+| `start_langchain` | `langchain_pipeline/test_langchain/research_agent.py` | Encadeamento LCEL (`prompt \| llm \| parser`) com guardrails e engenharia de contexto |
 | `start_langgraph` | `langgraph_pipeline/test_langgraph/research_agent.py` | Fluxo com `StateGraph`, guardrails, engenharia de contexto e modo durável (`--durable`) |
 | `start_crewai` | `crewai_pipeline/test_crewai/research_agent.py` | Três agentes especializados (sequencial; `--hierarchical` ativa delegação autônoma) |
 

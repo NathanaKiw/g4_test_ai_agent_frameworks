@@ -13,7 +13,7 @@ pip install --upgrade pip -q
 pip install -r requirements.txt -q
 
 echo "==> Instalando pacotes do projeto..."
-pip install -e ./common -e ./vanilla -e ./langgraph_pipeline -e ./crewai_pipeline -q
+pip install -e ./common -e ./vanilla -e ./langchain_pipeline -e ./langgraph_pipeline -e ./crewai_pipeline -q
 
 echo "==> Configurando arquivo de ambiente..."
 if [ ! -f .env ]; then
@@ -31,5 +31,6 @@ echo "Próximos passos:"
 echo "  1. source .venv/bin/activate"
 echo "  2. Edite .env e defina OPENAI_API_KEY=sk-..."
 echo "  3. start_vanilla --topic \"Seu tópico de pesquisa\""
-echo "  4. start_langgraph --topic \"Seu tópico de pesquisa\""
-echo "  5. start_crewai --topic \"Seu tópico de pesquisa\""
+echo "  4. start_langchain --topic \"Seu tópico de pesquisa\""
+echo "  5. start_langgraph --topic \"Seu tópico de pesquisa\""
+echo "  6. start_crewai --topic \"Seu tópico de pesquisa\""

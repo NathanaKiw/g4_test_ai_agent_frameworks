@@ -66,6 +66,7 @@ def _ensure_import_paths() -> None:
     paths = [
         str(ROOT / "common"),
         str(ROOT / "vanilla"),
+        str(ROOT / "langchain_pipeline"),
         str(ROOT / "langgraph_pipeline"),
         str(ROOT / "crewai_pipeline"),
     ]
@@ -463,7 +464,7 @@ def _write_html_report(
             <h1>Pipelines comparados com visual de dashboard</h1>
             <p class="lead">Experimento local e reprodutível com três frameworks, usando as métricas retornadas pelos pipelines para gerar comparativos visuais.</p>
             <div class="meta">
-                <div class="card"><div class="label">Frameworks</div><div class="value">{frameworks}</div><div class="sub">Vanilla, LangGraph e CrewAI</div></div>
+                <div class="card"><div class="label">Frameworks</div><div class="value">{frameworks}</div><div class="sub">Vanilla, LangChain, LangGraph e CrewAI</div></div>
                 <div class="card"><div class="label">Execuções</div><div class="value">{total_runs}</div><div class="sub">{args.runs} por framework</div></div>
                 <div class="card"><div class="label">Tempo médio geral</div><div class="value">{avg_total:.4f}s</div><div class="sub">Média de todos os runs</div></div>
                 <div class="card"><div class="label">Tokens médios</div><div class="value">{_mean(item.total_tokens for item in results):.1f}</div><div class="sub">Prompt + completion</div></div>
@@ -617,6 +618,7 @@ def _draw_grouped_stage_chart(path: Path, summary: List[Dict[str, Any]]) -> None
     categories = [key for key, _, _ in STAGE_METRICS]
     palette = {
         "Vanilla": ["#6d28d9", "#8b5cf6", "#c4b5fd"],
+        "LangChain": ["#f59e0b", "#fbbf24", "#fde68a"],
         "LangGraph": ["#2563eb", "#60a5fa", "#bfdbfe"],
         "CrewAI": ["#0ea5e9", "#22c55e", "#86efac"],
     }
@@ -744,6 +746,7 @@ def _draw_overview_metrics_chart(path: Path, summary: List[Dict[str, Any]]) -> N
 
     framework_colors = {
         "Vanilla": "#6d28d9",
+        "LangChain": "#f59e0b",
         "LangGraph": "#2563eb",
         "CrewAI": "#0ea5e9",
     }
@@ -861,6 +864,9 @@ def _factory_map() -> Dict[str, Callable[[], Any]]:
         VanillaAgent = importlib.import_module(
             "test_vanilla.research_agent"
         ).ResearchReportAgent
+        LangChainResearchReportAgent = importlib.import_module(
+            "test_langchain.research_agent"
+        ).LangChainResearchReportAgent
         LangGraphResearchReportAgent = importlib.import_module(
             "test_langgraph.research_agent"
         ).LangGraphResearchReportAgent
@@ -871,11 +877,13 @@ def _factory_map() -> Dict[str, Callable[[], Any]]:
         raise ImportError(
             "Dependências reais do benchmark não estão instaladas. "
             "Rode `pip install -r requirements.txt` e "
-            "`pip install -e ./common -e ./vanilla -e ./langgraph_pipeline -e ./crewai_pipeline`."
+            "`pip install -e ./common -e ./vanilla -e ./langchain_pipeline "
+            "-e ./langgraph_pipeline -e ./crewai_pipeline`."
         ) from exc
 
     return {
         "Vanilla": VanillaAgent,
+        "LangChain": LangChainResearchReportAgent,
         "LangGraph": LangGraphResearchReportAgent,
         "CrewAI": CrewAIResearchReportAgent,
     }
